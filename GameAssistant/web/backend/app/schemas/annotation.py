@@ -68,6 +68,10 @@ class AnnotationResponse(AnnotationBase):
     annotated_by: Optional[str] = None
     annotated_at: datetime
     updated_at: datetime
+    review_status: Optional[str] = None
+    review_comment: Optional[str] = None
+    reviewed_by: Optional[str] = None
+    reviewed_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -144,6 +148,7 @@ class ProjectResponse(ProjectBase):
     created_at: datetime
     updated_at: datetime
     completed_at: Optional[datetime] = None
+    review_feedback: Optional[str] = None
 
     class Config:
         from_attributes = True

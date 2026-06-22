@@ -151,6 +151,34 @@ export const annotationsApi = {
   async getStats(): Promise<ProjectStats> {
     return request.get('/annotations/stats')
   },
+
+  // Review
+  async submitForReview(projectId: string): Promise<AnnotationProject> {
+    return request.post(`/annotations/projects/${projectId}/submit-review`)
+  },
+
+  async approveProject(projectId: string): Promise<{ success: boolean }> {
+    return request.post(`/annotations/projects/${projectId}/approve`)
+  },
+
+  async rejectProject(projectId: string, data: { feedback?: string }): Promise<{ success: boolean }> {
+    return request.post(`/annotations/projects/${projectId}/reject`, data)
+  },
+
+  async getReviewQueue(params?: { page?: number; page_size?: number }): Promise<{ items: AnnotationProject[]; total: number }> {
+    const q = new URLSearchParams()
+    if (params?.page) q.set('page', String(params.page))
+    if (params?.page_size) q.set('page_size', String(params.page_size))
+    return request.get(`/annotations/projects/review-queue${q.toString() ? `?${q}` : ''}`)
+  },
+
+  async reviewAnnotation(annotationId: string, data: { action: string; comment?: string }): Promise<Annotation> {
+    return request.post(`/annotations/annotations/${annotationId}/review`, data)
+  },
+
+  async getReviewSummary(): Promise<{ total_projects: number; pending_review: number; needs_revision: number; completed: number; in_progress: number }> {
+    return request.get('/annotations/stats/review-summary')
+  },
 }
 
 export default annotationsApi

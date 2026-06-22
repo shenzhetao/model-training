@@ -428,5 +428,139 @@ async def get_annotation_stats(
     )
 
 
+@router.post("/projects/{project_id}/submit-review")
+async def submit_for_review(
+    project_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Submit a project for review (annotator marks it done, sends to reviewer)."""
+    project = await annotation_project_crud.get(db, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if project.status not in ("draft", "in_progress"):
+        raise HTTPException(status_code=400, detail=f"Cannot submit project in status '{project.status}'")
+    updated = await annotation_project_crud.update(db, project_id, {
+        "status": "in_review",
+    })
+    await db.commit()
+    return updated
+
+
+@router.post("/projects/{project_id}/approve")
+async def approve_project(
+    project_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Approve a project (reviewer accepts all annotations)."""
+    project = await annotation_project_crud.get(db, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    updated = await annotation_project_crud.update(db, project_id, {
+        "status": "completed",
+        "completed_at": datetime.utcnow(),
+    })
+    await db.commit()
+    return {"success": True, "message": f"Project '{project.name}' approved and completed"}
+
+
+@router.post("/projects/{project_id}/reject")
+async def reject_project(
+    project_id: str,
+    req: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Reject a project and return it to annotator with feedback."""
+    project = await annotation_project_crud.get(db, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    feedback = req.get("feedback", "")
+    updated = await annotation_project_crud.update(db, project_id, {
+        "status": "rejected",
+        "review_feedback": feedback,
+    })
+    await db.commit()
+    return {"success": True, "message": f"Project returned to annotator with feedback"}
+
+
+@router.get("/projects/review-queue")
+async def get_review_queue(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get all projects pending review (for reviewers)."""
+    skip = (page - 1) * page_size
+    from sqlalchemy import select
+    query = select(AnnotationProject).where(
+        AnnotationProject.status.in_(["in_review", "rejected"])
+    ).order_by(AnnotationProject.created_at.desc()).offset(skip).limit(page_size)
+    result = await db.execute(query)
+    projects = list(result.scalars().all())
+
+    count_q = select(func.count(AnnotationProject.id)).where(
+        AnnotationProject.status.in_(["in_review", "rejected"])
+    )
+    total_r = await db.execute(count_q)
+    total = total_r.scalar() or 0
+
+    return {"items": projects, "total": total}
+
+
+@router.post("/annotations/{annotation_id}/review")
+async def review_annotation(
+    annotation_id: str,
+    req: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Review a single annotation (approve or request changes)."""
+    ann = await annotation_crud.get(db, annotation_id)
+    if not ann:
+        raise HTTPException(status_code=404, detail="Annotation not found")
+    action = req.get("action", "approve")
+    comment = req.get("comment", "")
+    if action not in ("approve", "request_changes"):
+        raise HTTPException(status_code=400, detail="action must be 'approve' or 'request_changes'")
+    updated = await annotation_crud.update(db, annotation_id, {
+        "review_status": action,
+        "review_comment": comment,
+        "reviewed_by": current_user.id,
+        "reviewed_at": datetime.utcnow(),
+    })
+    await db.commit()
+    return updated
+
+
+@router.get("/stats/review-summary")
+async def get_review_summary(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get review statistics."""
+    from sqlalchemy import select, func
+
+    total_r = await db.execute(select(func.count(AnnotationProject.id)))
+    total = total_r.scalar() or 0
+
+    counts: dict[str, int] = {}
+    for status in ["draft", "in_progress", "in_review", "rejected", "completed"]:
+        r = await db.execute(
+            select(func.count(AnnotationProject.id)).where(AnnotationProject.status == status)
+        )
+        counts[status] = r.scalar() or 0
+
+    return {
+        "total_projects": total,
+        "pending_review": counts.get("in_review", 0),
+        "needs_revision": counts.get("rejected", 0),
+        "completed": counts.get("completed", 0),
+        "in_progress": counts.get("in_progress", 0),
+    }
+
+
 # Import Image model at module level for the export route
 from app.models.image import Image

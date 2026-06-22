@@ -45,6 +45,10 @@ class Annotation(Base):
     annotated_by = Column(String(36), nullable=True)
     annotated_at = Column(DateTime, nullable=False, server_default=func.now())
     updated_at = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
+    review_status = Column(String(32), nullable=True)
+    review_comment = Column(Text, nullable=True)
+    reviewed_by = Column(String(36), nullable=True)
+    reviewed_at = Column(DateTime, nullable=True)
 
     __table_args__ = (
         Index("idx_annotations_image_id", "image_id"),
@@ -82,6 +86,7 @@ class AnnotationProject(Base):
     created_at = Column(DateTime, nullable=False, server_default=func.now())
     updated_at = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
     completed_at = Column(DateTime, nullable=True)
+    review_feedback = Column(Text, nullable=True)
 
     __table_args__ = (
         Index("idx_annotation_projects_status", "status"),

@@ -276,6 +276,93 @@
           </template>
         </a-table>
       </a-tab-pane>
+
+      <!-- Review Tab -->
+      <a-tab-pane key="review" tab="审核管理">
+        <a-row :gutter="16">
+          <a-col :span="selectedReview ? 12 : 24">
+            <a-card title="审核队列" size="small">
+              <template #extra>
+                <a-space>
+                  <a-select v-model:value="reviewFilter" placeholder="筛选" style="width:120px" allowClear @change="loadReviewQueue">
+                    <a-select-option value="in_review">待审核</a-select-option>
+                    <a-select-option value="rejected">已退回</a-select-option>
+                  </a-select>
+                  <a-button size="small" @click="loadReviewQueue"><ReloadOutlined />刷新</ReloadOutlined></a-button>
+                </a-space>
+              </template>
+
+              <!-- Review Stats -->
+              <a-row :gutter="12" style="margin-bottom:16px">
+                <a-col :span="6"><a-statistic title="待审核" :value="reviewStats.pending_review" /></a-col>
+                <a-col :span="6"><a-statistic title="已退回" :value="reviewStats.needs_revision" /></a-col>
+                <a-col :span="6"><a-statistic title="已完成" :value="reviewStats.completed" /></a-col>
+                <a-col :span="6"><a-statistic title="进行中" :value="reviewStats.in_progress" /></a-col>
+              </a-row>
+
+              <a-table
+                :data-source="reviewQueue"
+                :columns="reviewColumns"
+                :loading="reviewLoading"
+                :pagination="{ pageSize: 10 }"
+                row-key="id"
+                size="small"
+              >
+                <template #bodyCell="{ column, record }">
+                  <template v-if="column.key === 'status'">
+                    <a-tag :color="getReviewStatusColor(record.status)">
+                      {{ getReviewStatusLabel(record.status) }}
+                    </a-tag>
+                  </template>
+                  <template v-else-if="column.key === 'action'">
+                    <a-button type="link" size="small" @click="selectReviewProject(record)">审核</a-button>
+                  </template>
+                </template>
+              </a-table>
+            </a-card>
+          </a-col>
+
+          <!-- Review Detail -->
+          <a-col :span="12" v-if="selectedReview">
+            <a-card size="small">
+              <template #title>
+                <div style="display:flex;align-items:center;gap:8px">
+                  <span>{{ selectedReview.name }}</span>
+                  <a-tag :color="getReviewStatusColor(selectedReview.status)">{{ getReviewStatusLabel(selectedReview.status) }}</a-tag>
+                </div>
+              </template>
+              <template #extra>
+                <a-button type="link" size="small" @click="selectedReview = null">关闭</a-button>
+              </template>
+
+              <a-descriptions :column="2" size="small" bordered style="margin-bottom:16px">
+                <a-descriptions-item label="进度">
+                  {{ selectedReview.annotated_images }} / {{ selectedReview.total_images }} 张
+                  <a-progress :percent="selectedReview.total_images > 0 ? Math.round(selectedReview.annotated_images / selectedReview.total_images * 100) : 0" size="small" style="margin-top:4px" />
+                </a-descriptions-item>
+                <a-descriptions-item label="已审核">{{ selectedReview.reviewed_images }} 张</a-descriptions-item>
+                <a-descriptions-item label="创建时间">{{ new Date(selectedReview.created_at).toLocaleString('zh-CN') }}</a-descriptions-item>
+                <a-descriptions-item label="描述">{{ selectedReview.description || '-' }}</a-descriptions-item>
+              </a-descriptions>
+
+              <a-divider>退回反馈</a-divider>
+              <p v-if="selectedReview.review_feedback" style="color:#f5222d;font-size:13px">{{ selectedReview.review_feedback }}</p>
+              <a-empty v-else description="暂无反馈" :image="Empty.PRESENTED_IMAGE_SIMPLE" />
+
+              <a-divider>审核操作</a-divider>
+              <a-space direction="vertical" style="width:100%">
+                <a-button type="primary" block @click="handleApproveProject(selectedReview)" :loading="reviewActionLoading">
+                  <template #icon><CheckOutlined /></template>通过审核
+                </a-button>
+                <a-textarea v-model:value="rejectFeedback" placeholder="填写退回原因（可选）" :rows="2" />
+                <a-button type="default" block danger @click="handleRejectProject(selectedReview)" :loading="reviewActionLoading">
+                  <template #icon><CloseOutlined /></template>退回修改
+                </a-button>
+              </a-space>
+            </a-card>
+          </a-col>
+        </a-row>
+      </a-tab-pane>
     </a-tabs>
 
     <!-- Create/Edit Project Modal -->
@@ -355,6 +442,8 @@ import {
   PlusOutlined,
   ReloadOutlined,
   FileImageOutlined,
+  CheckOutlined,
+  CloseOutlined,
 } from '@ant-design/icons-vue'
 import { useAnnotationsStore } from '@/stores/annotations'
 import annotationsApi from '@/api/annotations'
@@ -733,8 +822,25 @@ const classColumns = [
   { title: '操作', key: 'action', width: 120 },
 ]
 
+const reviewColumns = [
+  { title: '项目名称', dataIndex: 'name', key: 'name', ellipsis: true },
+  { title: '状态', key: 'status', width: 100 },
+  { title: '标注进度', key: 'progress', width: 150,
+    customRender: ({ record }: { record: any }) => `${record.annotated_images}/${record.total_images}` },
+  { title: '创建时间', dataIndex: 'created_at', key: 'created_at', width: 160,
+    customRender: ({ text }: { text: string }) => new Date(text).toLocaleDateString('zh-CN') },
+  { title: '操作', key: 'action', width: 80 },
+]
+
 const showCreateClass = ref(false)
 const editingClass = ref<AnnotationClass | null>(null)
+const reviewQueue = ref<any[]>([])
+const reviewStats = ref({ pending_review: 0, needs_revision: 0, completed: 0, in_progress: 0 })
+const reviewLoading = ref(false)
+const reviewActionLoading = ref(false)
+const selectedReview = ref<any | null>(null)
+const reviewFilter = ref<string | null>(null)
+const rejectFeedback = ref('')
 const classForm = reactive({
   name: '',
   display_name: '',
@@ -796,6 +902,59 @@ async function deleteClass(cls: AnnotationClass) {
   })
 }
 
+// ── Review ───────────────────────────────────────────────────
+function getReviewStatusColor(status: string): string {
+  return { draft: 'default', in_progress: 'processing', in_review: 'blue', rejected: 'error', completed: 'success' }[status] || 'default'
+}
+function getReviewStatusLabel(status: string): string {
+  return { draft: '草稿', in_progress: '进行中', in_review: '待审核', rejected: '已退回', completed: '已完成' }[status] || status
+}
+
+async function loadReviewQueue() {
+  reviewLoading.value = true
+  try {
+    const res: any = await annotationsApi.getReviewQueue({})
+    reviewQueue.value = res.items || []
+    reviewStats.value = {
+      pending_review: reviewQueue.value.filter((p: any) => p.status === 'in_review').length,
+      needs_revision: reviewQueue.value.filter((p: any) => p.status === 'rejected').length,
+      completed: 0,
+      in_progress: 0,
+    }
+    const statsRes: any = await annotationsApi.getReviewSummary()
+    reviewStats.value.completed = statsRes.completed || 0
+    reviewStats.value.in_progress = statsRes.in_progress || 0
+  } catch (e) { console.error(e) }
+  finally { reviewLoading.value = false }
+}
+
+function selectReviewProject(project: any) {
+  selectedReview.value = project
+  rejectFeedback.value = project.review_feedback || ''
+}
+
+async function handleApproveProject(project: any) {
+  reviewActionLoading.value = true
+  try {
+    await annotationsApi.approveProject(project.id)
+    message.success('项目已通过审核')
+    selectedReview.value = null
+    await loadReviewQueue()
+  } catch { message.error('操作失败') }
+  finally { reviewActionLoading.value = false }
+}
+
+async function handleRejectProject(project: any) {
+  reviewActionLoading.value = true
+  try {
+    await annotationsApi.rejectProject(project.id, { feedback: rejectFeedback.value })
+    message.success('项目已退回')
+    selectedReview.value = null
+    await loadReviewQueue()
+  } catch { message.error('操作失败') }
+  finally { reviewActionLoading.value = false }
+}
+
 // ── Lifecycle ───────────────────────────────────────────────
 onMounted(async () => {
   await Promise.all([
@@ -803,6 +962,7 @@ onMounted(async () => {
     loadProjects(),
     loadStats(),
     loadAnnotateImages(),
+    loadReviewQueue(),
   ])
 })
 

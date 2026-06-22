@@ -6,6 +6,7 @@ from .template import Template, TemplateClass
 from .dataset import Dataset, DatasetVersion, DatasetVersionImage
 from .model import Model
 from .training import TrainingJob, TrainingLog
+from .inference import InferenceResult
 
 __all__ = [
     "User", "Image", "SourceVideo", "VideoExtractionTask",
@@ -15,4 +16,5 @@ __all__ = [
     "Dataset", "DatasetVersion", "DatasetVersionImage",
     "Model",
     "TrainingJob", "TrainingLog",
+    "InferenceResult",
 ]
