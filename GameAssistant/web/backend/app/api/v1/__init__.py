@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.v1 import users, images, video, adb, annotations, templates, datasets
+from app.api.v1 import users, images, video, adb, annotations, templates, datasets, models, training
 
 api_router = APIRouter()
 
@@ -12,3 +12,5 @@ api_router.include_router(adb.router, prefix="/adb", tags=["adb"])
 api_router.include_router(annotations.router, prefix="/annotations", tags=["annotations"])
 api_router.include_router(templates.router, prefix="/templates", tags=["templates"])
 api_router.include_router(datasets.router, prefix="/datasets", tags=["datasets"])
+api_router.include_router(models.router, prefix="/models", tags=["models"])
+api_router.include_router(training.router, prefix="/training", tags=["training"])

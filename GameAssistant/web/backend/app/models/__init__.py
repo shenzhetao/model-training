@@ -4,6 +4,8 @@ from .video import SourceVideo, VideoExtractionTask
 from .annotation import Annotation, AnnotationClass, AnnotationProject, AnnotationProjectImage, AnnotationReview
 from .template import Template, TemplateClass
 from .dataset import Dataset, DatasetVersion, DatasetVersionImage
+from .model import Model
+from .training import TrainingJob, TrainingLog
 
 __all__ = [
     "User", "Image", "SourceVideo", "VideoExtractionTask",
@@ -11,4 +13,6 @@ __all__ = [
     "AnnotationProjectImage", "AnnotationReview",
     "Template", "TemplateClass",
     "Dataset", "DatasetVersion", "DatasetVersionImage",
+    "Model",
+    "TrainingJob", "TrainingLog",
 ]
