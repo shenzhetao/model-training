@@ -90,4 +90,9 @@ package-lock.json
 # Misc
 # ============================================================
 .commit_msg.txt
+
+# Root-level docs (non-project specific)
+完整实施指南.md
+游戏辅助工具开发方案.md
+项目可行性分析报告.md
 .commit_msg.txt
