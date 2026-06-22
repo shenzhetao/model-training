@@ -105,14 +105,34 @@
 
           <!-- Right Panel: Detail / Test -->
           <a-col :span="10">
+            <!-- Large Preview -->
+            <a-card title="模板预览" size="small" style="margin-bottom: 16px">
+              <div v-if="selectedTemplate" class="preview-container" @click="showPreviewModal = true">
+                <img :src="getThumbUrl(selectedTemplate.id)" class="preview-thumb" />
+                <div class="preview-overlay">
+                  <FullscreenOutlined class="preview-icon" />
+                  <span>点击放大</span>
+                </div>
+              </div>
+              <a-empty v-else description="选择模板预览" :image="Empty.PRESENTED_IMAGE_SIMPLE" />
+            </a-card>
+
+            <!-- Detail -->
             <a-card title="模板详情" size="small" style="margin-bottom: 16px">
-              <div v-if="selectedTemplate" class="template-detail">
-                <img :src="getThumbUrl(selectedTemplate.id)" class="detail-img" />
+              <div v-if="selectedTemplate">
                 <a-descriptions :column="1" size="small">
                   <a-descriptions-item label="名称">{{ selectedTemplate.name }}</a-descriptions-item>
-                  <a-descriptions-item label="类别">{{ selectedTemplate.class_name }}</a-descriptions-item>
+                  <a-descriptions-item label="类别">
+                    <a-tag :color="getClassColor(selectedTemplate.class_name)">{{ selectedTemplate.class_name }}</a-tag>
+                  </a-descriptions-item>
                   <a-descriptions-item label="尺寸">{{ selectedTemplate.width }}x{{ selectedTemplate.height }}</a-descriptions-item>
-                  <a-descriptions-item label="匹配阈值">{{ selectedTemplate.match_threshold }}</a-descriptions-item>
+                  <a-descriptions-item label="匹配阈值">
+                    <a-progress :percent="Math.round(selectedTemplate.match_threshold * 100)" size="small" :stroke-color="getThresholdColor(selectedTemplate.match_threshold)" />
+                    {{ (selectedTemplate.match_threshold * 100).toFixed(0) }}%
+                  </a-descriptions-item>
+                  <a-descriptions-item label="状态">
+                    <a-badge :status="selectedTemplate.is_active ? 'success' : 'default'" :text="selectedTemplate.is_active ? '启用' : '禁用'" />
+                  </a-descriptions-item>
                   <a-descriptions-item label="上传时间">
                     {{ new Date(selectedTemplate.created_at).toLocaleString('zh-CN') }}
                   </a-descriptions-item>
@@ -121,7 +141,8 @@
               <a-empty v-else description="选择模板查看详情" :image="Empty.PRESENTED_IMAGE_SIMPLE" />
             </a-card>
 
-            <a-card title="匹配测试" size="small">
+            <!-- Matching Parameters Config -->
+            <a-card title="匹配参数" size="small">
               <a-form layout="vertical">
                 <a-form-item label="选择图片">
                   <a-select
@@ -151,8 +172,23 @@
                   </a-select>
                 </a-form-item>
                 <a-form-item label="匹配阈值">
-                  <a-slider v-model:value="testThreshold" :min="0.1" :max="1.0" :step="0.05" />
-                  <span class="threshold-value">{{ (testThreshold * 100).toFixed(0) }}%</span>
+                  <a-slider v-model:value="testThreshold" :min="0.1" :max="1.0" :step="0.05" :marks="{ 0.5: '宽松', 0.8: '标准', 0.95: '严格' }" />
+                  <div class="threshold-display">
+                    <a-tag :color="getThresholdColor(testThreshold)">{{ (testThreshold * 100).toFixed(0) }}%</a-tag>
+                    <span class="threshold-hint">{{ getThresholdHint(testThreshold) }}</span>
+                  </div>
+                </a-form-item>
+                <a-form-item label="多匹配">
+                  <a-switch v-model:value="multiMatch" />
+                  <span class="switch-label">允许多个匹配结果</span>
+                </a-form-item>
+                <a-form-item label="匹配方法">
+                  <a-select v-model:value="matchMethod" style="width:100%">
+                    <a-select-option value="tm_ccoeff">归一化相关系数（推荐）</a-select-option>
+                    <a-select-option value="tm_sqdiff">平方差匹配</a-select-option>
+                    <a-select-option value="tm_c coeff">相关系数</a-select-option>
+                    <a-select-option value="sqdiff_normed">平方差归一化</a-select-option>
+                  </a-select>
                 </a-form-item>
                 <a-button type="primary" block :loading="testLoading" @click="runTest">
                   <template #icon><ThunderboltOutlined /></template>
@@ -162,14 +198,12 @@
                 <div v-if="testResults.length > 0" class="test-results">
                   <a-divider>匹配结果 ({{ testResults.length }})</a-divider>
                   <div v-for="r in testResults" :key="r.template_id" class="test-result-item">
-                    <a-tag :color="r.matched ? 'green' : 'red'">
-                      {{ r.matched ? '匹配' : '未匹配' }}
-                    </a-tag>
+                    <a-tag :color="r.matched ? 'green' : 'red'">{{ r.matched ? '匹配' : '未匹配' }}</a-tag>
                     <span class="result-name">{{ r.template_name }}</span>
-                    <span class="result-conf">{{ (r.conf * 100).toFixed(1) }}%</span>
-                    <span v-if="r.matched" class="result-pos">
-                      ({{ r.x }}, {{ r.y }})
+                    <span class="result-conf" :style="{ color: r.matched ? '#52c41a' : '#ff4d4f' }">
+                      {{ (r.conf * 100).toFixed(1) }}%
                     </span>
+                    <span v-if="r.matched" class="result-pos">({{ r.x }}, {{ r.y }})</span>
                   </div>
                 </div>
               </a-form>
@@ -210,6 +244,22 @@
         </a-form-item>
       </a-form>
     </a-modal>
+
+    <!-- Large Preview Modal -->
+    <a-modal
+      v-model:open="showPreviewModal"
+      :title="selectedTemplate?.name"
+      :footer="null"
+      :width="Math.min((selectedTemplate?.width || 400) + 48, 800)"
+      centered
+    >
+      <img
+        v-if="selectedTemplate"
+        :src="getThumbUrl(selectedTemplate.id)"
+        :alt="selectedTemplate.name"
+        style="width: 100%; display: block;"
+      />
+    </a-modal>
   </div>
 </template>
 
@@ -223,6 +273,7 @@ import {
   DeleteOutlined,
   FileImageOutlined,
   ThunderboltOutlined,
+  FullscreenOutlined,
 } from '@ant-design/icons-vue'
 import { useTemplatesStore } from '@/stores/templates'
 import templatesApi from '@/api/templates'
@@ -249,6 +300,9 @@ const testImages = ref<ImageResponse[]>([])
 const testImageId = ref<string | null>(null)
 const testTemplateIds = ref<string[]>([])
 const testThreshold = ref(0.8)
+const multiMatch = ref(false)
+const matchMethod = ref('tm_ccoeff')
+const showPreviewModal = ref(false)
 
 const showUpload = ref(false)
 const previewUrl = ref('')
@@ -290,6 +344,18 @@ function getClassColor(className: string): string {
   let h = 0
   for (const c of className) h = (h * 31 + c.charCodeAt(0)) % colors.length
   return colors[h]
+}
+
+function getThresholdColor(threshold: number): string {
+  if (threshold >= 0.85) return '#52c41a'
+  if (threshold >= 0.65) return '#1890ff'
+  return '#faad14'
+}
+
+function getThresholdHint(threshold: number): string {
+  if (threshold >= 0.9) return '严格模式，可能漏检'
+  if (threshold >= 0.75) return '平衡模式（推荐）'
+  return '宽松模式，可能误检'
 }
 
 function handleTreeSelect(keys: string[]) {
@@ -392,6 +458,8 @@ async function runTest() {
     image_id: testImageId.value,
     template_ids: testTemplateIds.value.length > 0 ? testTemplateIds.value : undefined,
     threshold: testThreshold.value,
+    multi_match: multiMatch.value,
+    method: matchMethod.value,
   })
 }
 
@@ -423,10 +491,18 @@ onMounted(() => { loadTemplates() })
 .template-actions { padding: 0 4px 4px; text-align: right; }
 .detail-img { width: 100%; max-height: 200px; object-fit: contain; border-radius: 8px; margin-bottom: 12px; }
 .threshold-value { margin-left: 8px; color: #1890ff; font-weight: 500; }
+.threshold-display { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.threshold-hint { font-size: 12px; color: #999; }
 .test-results { margin-top: 16px; }
 .test-result-item { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid #f0f0f0; }
 .result-name { flex: 1; font-size: 13px; }
 .result-conf { color: #52c41a; font-weight: 500; }
 .result-pos { color: #999; font-size: 12px; }
 .upload-preview img { max-width: 200px; max-height: 200px; margin-top: 8px; border-radius: 8px; border: 1px solid #d9d9d9; }
+.preview-container { position: relative; border-radius: 8px; overflow: hidden; cursor: zoom-in; background: #f0f0f0; }
+.preview-thumb { width: 100%; max-height: 180px; object-fit: contain; display: block; }
+.preview-overlay { position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(transparent, rgba(0,0,0,0.5)); color: white; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 8px; font-size: 12px; opacity: 0; transition: opacity 0.2s; }
+.preview-container:hover .preview-overlay { opacity: 1; }
+.preview-icon { font-size: 14px; }
+.switch-label { margin-left: 8px; font-size: 13px; color: #666; }
 </style>

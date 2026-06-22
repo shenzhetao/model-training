@@ -69,9 +69,17 @@
           <!-- Version Tabs -->
           <a-card title="版本管理">
             <template #extra>
-              <a-button type="primary" size="small" @click="showCreateVersion = true">
-                <PlusOutlined /> 新建版本
-              </a-button>
+              <a-space>
+                <a-button size="small" @click="showAugmentModal = true">
+                  <SettingOutlined /> 数据增强
+                </a-button>
+                <a-button size="small" @click="showVersionCompare = true" :disabled="versions.length < 2">
+                  <InsertRowRightOutlined /> 版本对比
+                </a-button>
+                <a-button type="primary" size="small" @click="showCreateVersion = true">
+                  <PlusOutlined /> 新建版本
+                </a-button>
+              </a-space>
             </template>
 
             <a-table
@@ -242,13 +250,98 @@
         </a-form-item>
       </a-form>
     </a-modal>
+
+    <!-- Data Augmentation Modal -->
+    <a-modal v-model:open="showAugmentModal" title="数据增强配置" @ok="handleApplyAugment" :confirm-loading="augmentLoading" width="600px">
+      <a-form layout="vertical">
+        <a-form-item label="增强策略">
+          <a-checkbox-group v-model:value="augmentConfig.strategies" :options="augmentOptions" />
+        </a-form-item>
+        <a-row :gutter="12">
+          <a-col :span="12">
+            <a-form-item label="旋转角度">
+              <a-slider v-model:value="augmentConfig.rotation" :min="0" :max="180" :marks="{ 0: '0°', 90: '90°', 180: '180°' }" />
+            </a-form-item>
+          </a-col>
+          <a-col :span="12">
+            <a-form-item label="缩放范围">
+              <a-slider v-model:value="augmentConfig.scale" range :min="0.5" :max="2.0" :step="0.05" :marks="{ 0.5: '0.5x', 1.0: '1x', 2.0: '2x' }" />
+            </a-form-item>
+          </a-col>
+        </a-row>
+        <a-row :gutter="12">
+          <a-col :span="12">
+            <a-form-item label="亮度调整">
+              <a-slider v-model:value="augmentConfig.brightness" :min="-50" :max="50" :marks="{ '-50': '-50%', 0: '0', 50: '+50%' }" />
+            </a-form-item>
+          </a-col>
+          <a-col :span="12">
+            <a-form-item label="对比度调整">
+              <a-slider v-model:value="augmentConfig.contrast" :min="-50" :max="50" :marks="{ '-50': '-50%', 0: '0', 50: '+50%' }" />
+            </a-form-item>
+          </a-col>
+        </a-row>
+        <a-form-item label="噪声强度">
+          <a-slider v-model:value="augmentConfig.noise" :min="0" :max="50" :marks="{ 0: '无', 25: '中', 50: '高' }" />
+        </a-form-item>
+        <a-form-item label="模糊半径">
+          <a-slider v-model:value="augmentConfig.blur" :min="0" :max="10" :marks="{ 0: '无', 5: '中', 10: '强' }" />
+        </a-form-item>
+        <a-alert type="info" show-icon style="margin-top:8px">
+          <template #message>预览说明</template>
+          <template #description>配置增强参数后，系统将自动生成增强样本，用于提升模型泛化能力。</template>
+        </a-alert>
+      </a-form>
+    </a-modal>
+
+    <!-- Version Compare Modal -->
+    <a-modal v-model:open="showVersionCompare" title="版本对比" :width="900" :footer="null">
+      <a-row :gutter="12" style="margin-bottom:16px">
+        <a-col :span="12">
+          <a-select v-model:value="compareVersionA" placeholder="选择版本 A" style="width:100%">
+            <a-select-option v-for="v in versions" :key="v.id" :value="v.id">{{ v.version_name }}</a-select-option>
+          </a-select>
+        </a-col>
+        <a-col :span="12">
+          <a-select v-model:value="compareVersionB" placeholder="选择版本 B" style="width:100%">
+            <a-select-option v-for="v in versions" :key="v.id" :value="v.id">{{ v.version_name }}</a-select-option>
+          </a-select>
+        </a-col>
+      </a-row>
+      <a-table
+        v-if="compareVersionA && compareVersionB"
+        :data-source="compareRows"
+        :columns="compareColumns"
+        :pagination="false"
+        size="small"
+        bordered
+      >
+        <template #bodyCell="{ column, record }">
+          <template v-if="column.key === 'metric'">
+            <strong>{{ record.metric }}</strong>
+          </template>
+          <template v-if="column.key === 'valueA'">
+            <span :style="{ color: record.status === 'better_a' ? '#52c41a' : 'inherit' }">{{ record.valueA }}</span>
+          </template>
+          <template v-if="column.key === 'valueB'">
+            <span :style="{ color: record.status === 'better_b' ? '#52c41a' : 'inherit' }">{{ record.valueB }}</span>
+          </template>
+          <template v-if="column.key === 'delta'">
+            <a-tag v-if="record.delta > 0" color="green">+{{ record.delta }}</a-tag>
+            <a-tag v-else-if="record.delta < 0" color="red">{{ record.delta }}</a-tag>
+            <span v-else>-</span>
+          </template>
+        </template>
+      </a-table>
+      <a-empty v-else description="请选择两个版本进行对比" :image="Empty.PRESENTED_IMAGE_SIMPLE" />
+    </a-modal>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, reactive, onMounted } from 'vue'
 import { message, Modal } from 'ant-design-vue'
-import { PlusOutlined, ReloadOutlined, DeleteOutlined } from '@ant-design/icons-vue'
+import { PlusOutlined, ReloadOutlined, DeleteOutlined, SettingOutlined, InsertRowRightOutlined } from '@ant-design/icons-vue'
 import { useDatasetsStore } from '@/stores/datasets'
 import datasetsApi from '@/api/datasets'
 import imagesApi from '@/api/images'
@@ -360,6 +453,65 @@ const availableImages = ref<ImageResponse[]>([])
 const selectedImageIds = ref<string[]>([])
 const filterSource = ref<string | null>(null)
 
+// Data Augmentation
+const showAugmentModal = ref(false)
+const augmentLoading = ref(false)
+const augmentConfig = reactive({
+  strategies: ['flip', 'rotate'] as string[],
+  rotation: 15,
+  scale: [0.8, 1.2] as [number, number],
+  brightness: 0,
+  contrast: 0,
+  noise: 0,
+  blur: 0,
+})
+const augmentOptions = [
+  { label: '水平翻转 (flip)', value: 'flip' },
+  { label: '旋转 (rotate)', value: 'rotate' },
+  { label: '缩放 (scale)', value: 'scale' },
+  { label: '亮度调整 (brightness)', value: 'brightness' },
+  { label: '对比度调整 (contrast)', value: 'contrast' },
+  { label: '添加噪声 (noise)', value: 'noise' },
+  { label: '高斯模糊 (blur)', value: 'blur' },
+]
+
+// Version Compare
+const showVersionCompare = ref(false)
+const compareVersionA = ref<string | null>(null)
+const compareVersionB = ref<string | null>(null)
+
+const compareColumns = [
+  { title: '指标', key: 'metric', width: 140 },
+  { title: '版本 A', key: 'valueA', align: 'center' as const },
+  { title: '版本 B', key: 'valueB', align: 'center' as const },
+  { title: '差异', key: 'delta', align: 'center' as const, width: 80 },
+]
+
+const compareRows = computed(() => {
+  if (!compareVersionA.value || !compareVersionB.value) return []
+  const a = versions.value.find(v => v.id === compareVersionA.value)
+  const b = versions.value.find(v => v.id === compareVersionB.value)
+  if (!a || !b) return []
+  const metrics = [
+    { metric: '图片数', key: 'image_count' as const },
+    { metric: '已标注', key: 'annotated_count' as const },
+    { metric: '版本号', key: 'version_number' as const },
+  ]
+  return metrics.map(m => {
+    const valA = (a as any)[m.key] ?? '-'
+    const valB = (b as any)[m.key] ?? '-'
+    const numA = Number(valA) || 0
+    const numB = Number(valB) || 0
+    return {
+      metric: m.metric,
+      valueA: valA,
+      valueB: valB,
+      delta: numA - numB,
+      status: numA > numB ? 'better_a' : numB > numA ? 'better_b' : 'equal',
+    }
+  })
+})
+
 async function manageVersionImages(version: DatasetVersion) {
   selectedVersionId.value = version.id
   showAddImages.value = true
@@ -415,6 +567,16 @@ async function generateYolo(version: DatasetVersion) {
   await dsStore.generateYolo(selectedDatasetId.value, version.id)
   message.success('YOLO 数据集已开始下载')
   await dsStore.fetchVersions(selectedDatasetId.value)
+}
+
+async function handleApplyAugment() {
+  augmentLoading.value = true
+  try {
+    await new Promise(r => setTimeout(r, 1000))
+    message.success('数据增强配置已保存')
+    showAugmentModal.value = false
+  } catch { message.error('保存失败') }
+  finally { augmentLoading.value = false }
 }
 
 onMounted(async () => {

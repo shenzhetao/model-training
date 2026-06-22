@@ -104,6 +104,8 @@ export const templatesApi = {
     image_url?: string
     template_ids?: string[]
     threshold?: number
+    multi_match?: boolean
+    method?: string
   }): Promise<{ success: boolean; results: TemplateTestResult[]; message: string }> {
     return request.post('/templates/test', params)
   },
