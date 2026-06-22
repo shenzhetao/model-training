@@ -144,12 +144,31 @@
 
         <!-- Metrics Chart -->
         <a-card title="训练指标" size="small">
+          <template #extra>
+            <a-space>
+              <a-button size="small" @click="handleDownloadLog" :disabled="!currentJob">
+                <template #icon><DownloadOutlined /></template>下载日志
+              </a-button>
+            </a-space>
+          </template>
           <a-tabs>
             <a-tab-pane key="loss" tab="Loss">
-              <div ref="lossChartRef" class="chart-container"></div>
+              <div ref="lossChartRef" class="chart-wrapper">
+                <v-chart v-if="lossOption" class="echarts-chart" :option="lossOption" autoresize />
+                <a-empty v-else description="暂无数据" :image="Empty.PRESENTED_IMAGE_SIMPLE" />
+              </div>
             </a-tab-pane>
             <a-tab-pane key="map" tab="mAP">
-              <div ref="mapChartRef" class="chart-container"></div>
+              <div ref="mapChartRef" class="chart-wrapper">
+                <v-chart v-if="mapOption" class="echarts-chart" :option="mapOption" autoresize />
+                <a-empty v-else description="暂无数据" :image="Empty.PRESENTED_IMAGE_SIMPLE" />
+              </div>
+            </a-tab-pane>
+            <a-tab-pane key="precision" tab="Precision/Recall">
+              <div class="chart-wrapper">
+                <v-chart v-if="prOption" class="echarts-chart" :option="prOption" autoresize />
+                <a-empty v-else description="暂无数据" :image="Empty.PRESENTED_IMAGE_SIMPLE" />
+              </div>
             </a-tab-pane>
             <a-tab-pane key="log" tab="原始日志">
               <div class="log-container">
@@ -265,7 +284,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, reactive, onUnmounted, watch } from 'vue'
 import { message } from 'ant-design-vue'
-import { ReloadOutlined, PlusOutlined, StarOutlined } from '@ant-design/icons-vue'
+import { ReloadOutlined, PlusOutlined, StarOutlined, DownloadOutlined } from '@ant-design/icons-vue'
 import { useTrainingStore } from '@/stores/training'
 import trainingApi from '@/api/training'
 import type { TrainingJob } from '@/api/training'
@@ -283,6 +302,9 @@ const availableVersions = ref<any[]>([])
 const jobLogPreview = ref('')
 const lossChartRef = ref<HTMLDivElement | null>(null)
 const mapChartRef = ref<HTMLDivElement | null>(null)
+const lossOption = ref<any>(null)
+const mapOption = ref<any>(null)
+const prOption = ref<any>(null)
 
 const columns = [
   { title: '任务名称', dataIndex: 'name', key: 'name', width: 180, ellipsis: true },
@@ -346,36 +368,70 @@ async function selectJob(job: TrainingJob) {
 }
 
 function renderCharts() {
-  // Simple text-based chart fallback (could upgrade to Chart.js)
   const m = metrics.value
   if (!m.length) return
 
-  // Loss chart as ASCII text
-  if (lossChartRef.value) {
-    const latest = m.slice(-50)
-    const maxLoss = Math.max(...latest.map(l => l.train_box_loss || 0.01))
-    const lines: string[] = []
-    for (let row = 0; row < 8; row++) {
-      const threshold = maxLoss * (8 - row) / 8
-      const bar = latest.map(l => (l.train_box_loss || 0) >= threshold ? '█' : ' ').join('')
-      lines.push(`${(threshold).toFixed(3).padStart(7)} │${bar}`)
-    }
-    lines.push('         └' + '─'.repeat(Math.min(latest.length, 50)))
-    if (lossChartRef.value) lossChartRef.value.innerText = lines.join('\n')
+  const epochs = m.map(l => l.epoch)
+
+  // Loss chart
+  lossOption.value = {
+    backgroundColor: 'transparent',
+    tooltip: { trigger: 'axis', formatter: (params: any[]) => {
+      const p = params[0]
+      return `Epoch ${p.axisValue}<br/>` + params.map(s => `<span style="color:${s.color}">${s.seriesName}: ${s.value?.toFixed(4) ?? '-'}</span>`).join('<br/>')
+    }},
+    legend: { data: ['Box Loss', 'Cls Loss', 'Val Box'], top: 0, textStyle: { color: '#999', fontSize: 11 } },
+    grid: { top: 36, right: 16, bottom: 24, left: 52, containLabel: false },
+    xAxis: { type: 'category', data: epochs, axisLabel: { color: '#999', fontSize: 11 }, splitLine: { show: false } },
+    yAxis: { type: 'value', axisLabel: { color: '#999', fontSize: 11 }, splitLine: { lineStyle: { color: '#2a2a2a' } } },
+    series: [
+      { name: 'Box Loss', type: 'line', data: m.map(l => l.train_box_loss), smooth: true, color: '#ff6b6b', lineStyle: { width: 2 }, symbol: 'none' },
+      { name: 'Cls Loss', type: 'line', data: m.map(l => l.train_cls_loss), smooth: true, color: '#ffd93d', lineStyle: { width: 2 }, symbol: 'none' },
+      { name: 'Val Box', type: 'line', data: m.map(l => l.val_box_loss), smooth: true, color: '#4d96ff', lineStyle: { width: 2 }, symbol: 'none' },
+    ],
   }
 
-  if (mapChartRef.value) {
-    const latest = m.slice(-50)
-    const maxMap = Math.min(1, Math.max(...latest.map(l => l.map50 || 0.01)))
-    const lines: string[] = []
-    for (let row = 0; row < 8; row++) {
-      const threshold = maxMap * (8 - row) / 8
-      const bar = latest.map(l => (l.map50 || 0) >= threshold ? '█' : ' ').join('')
-      lines.push(`${(threshold).toFixed(3).padStart(7)} │${bar}`)
-    }
-    lines.push('         └' + '─'.repeat(Math.min(latest.length, 50)))
-    if (mapChartRef.value) mapChartRef.value.innerText = lines.join('\n')
+  // mAP chart
+  mapOption.value = {
+    backgroundColor: 'transparent',
+    tooltip: { trigger: 'axis', formatter: (params: any[]) => {
+      return `Epoch ${params[0].axisValue}<br/>` + params.map(s => `<span style="color:${s.color}">${s.seriesName}: ${(s.value * 100).toFixed(2)}%</span>`).join('<br/>')
+    }},
+    legend: { data: ['mAP50', 'mAP50-95'], top: 0, textStyle: { color: '#999', fontSize: 11 } },
+    grid: { top: 36, right: 16, bottom: 24, left: 52, containLabel: false },
+    xAxis: { type: 'category', data: epochs, axisLabel: { color: '#999', fontSize: 11 }, splitLine: { show: false } },
+    yAxis: { type: 'value', axisLabel: { color: '#999', fontSize: 11, formatter: (v: number) => `${(v * 100).toFixed(0)}%` }, max: 1, splitLine: { lineStyle: { color: '#2a2a2a' } } },
+    series: [
+      { name: 'mAP50', type: 'line', data: m.map(l => l.map50), smooth: true, color: '#6bcb77', lineStyle: { width: 2 }, areaStyle: { color: 'rgba(107,203,119,0.1)' }, symbol: 'none' },
+      { name: 'mAP50-95', type: 'line', data: m.map(l => l.map50_95), smooth: true, color: '#4d96ff', lineStyle: { width: 2 }, symbol: 'none' },
+    ],
   }
+
+  // Precision/Recall chart
+  prOption.value = {
+    backgroundColor: 'transparent',
+    tooltip: { trigger: 'axis' },
+    legend: { data: ['Precision', 'Recall'], top: 0, textStyle: { color: '#999', fontSize: 11 } },
+    grid: { top: 36, right: 16, bottom: 24, left: 52, containLabel: false },
+    xAxis: { type: 'category', data: epochs, axisLabel: { color: '#999', fontSize: 11 }, splitLine: { show: false } },
+    yAxis: { type: 'value', axisLabel: { color: '#999', fontSize: 11, formatter: (v: number) => `${(v * 100).toFixed(0)}%` }, max: 1, splitLine: { lineStyle: { color: '#2a2a2a' } } },
+    series: [
+      { name: 'Precision', type: 'line', data: m.map(l => l.precision), smooth: true, color: '#c77dff', lineStyle: { width: 2 }, symbol: 'none' },
+      { name: 'Recall', type: 'line', data: m.map(l => l.recall), smooth: true, color: '#ff6b6b', lineStyle: { width: 2 }, symbol: 'none' },
+    ],
+  }
+}
+
+function handleDownloadLog() {
+  if (!currentJob.value) return
+  const content = jobLogPreview.value || ''
+  const blob = new Blob([content], { type: 'text/plain' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `train_${currentJob.value.name}_${currentJob.value.id.slice(0, 8)}.log`
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
 watch(metrics, () => { renderCharts() }, { deep: true })
@@ -458,5 +514,15 @@ onUnmounted(() => {
   white-space: pre;
   overflow-x: auto;
   min-height: 180px;
+}
+.chart-wrapper {
+  min-height: 200px;
+  background: #1e1e1e;
+  border-radius: 8px;
+  padding: 4px;
+}
+.echarts-chart {
+  width: 100%;
+  height: 220px;
 }
 </style>

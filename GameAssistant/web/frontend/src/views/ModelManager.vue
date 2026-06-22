@@ -131,43 +131,54 @@
             </a-descriptions-item>
           </a-descriptions>
 
-          <!-- Training Metrics Chart Placeholder -->
-          <a-divider>训练曲线</a-divider>
+          <!-- Training Metrics Chart -->
+          <a-divider>评估曲线</a-divider>
+          <div v-if="selectedModel.training_job_id" class="eval-chart-container">
+            <v-chart
+              v-if="evalChartOption"
+              class="eval-chart"
+              :option="evalChartOption"
+              autoresize
+            />
+            <a-skeleton v-else active :paragraph="{ rows: 6 }" />
+          </div>
           <a-alert
-            v-if="selectedModel.training_job_id"
+            v-else
             type="info"
-            message="查看完整训练曲线，请在训练管理页面查看该任务详情。"
+            message="该模型关联了训练任务，在训练管理中查看完整曲线。"
             show-icon
           />
-          <a-empty v-else description="暂无训练记录" :image="Empty.PRESENTED_IMAGE_SIMPLE" />
 
-          <!-- Tags -->
-          <a-divider>标签</a-divider>
-          <a-tag
-            v-for="tag in (selectedModel.tags || [])"
-            :key="tag"
-            closable
-            @close="removeTag(selectedModel, tag)"
-          >
-            {{ tag }}
-          </a-tag>
-          <a-input
-            v-if="addingTag"
-            ref="tagInputRef"
-            size="small"
-            style="width: 80px"
-            v-model:value="newTag"
-            @keyup.enter="addTag(selectedModel)"
-            @blur="addingTag = false"
-            placeholder="添加标签"
-          />
-          <a-button v-else size="small" type="dashed" @click="startAddTag">
-            <template #icon><PlusOutlined /></template>
-            标签
-          </a-button>
+          <!-- Model Actions -->
+          <a-divider>操作</a-divider>
+          <a-space wrap>
+            <a-button type="primary" @click="handleDownload(selectedModel)">
+              <template #icon><DownloadOutlined /></template>下载模型
+            </a-button>
+            <a-button @click="showVersionHistory">
+              <template #icon><HistoryOutlined /></template>训练历史
+            </a-button>
+          </a-space>
         </a-card>
       </a-col>
     </a-row>
+
+    <!-- Version History Modal -->
+    <a-modal v-model:open="showVersionHistoryModal" title="训练历史" :footer="null" width="700px">
+      <a-timeline v-if="modelHistory.length > 0">
+        <a-timeline-item v-for="h in modelHistory" :key="h.job_id" :color="h.status === 'completed' ? 'green' : 'blue'">
+          <p><strong>{{ h.name }}</strong> — {{ h.architecture }}</p>
+          <p class="timeline-meta">
+            {{ new Date(h.started_at || h.created_at).toLocaleString('zh-CN') }}
+            <template v-if="h.map50"> | mAP50: {{ (h.map50 * 100).toFixed(1) }}%</template>
+            <template v-if="h.map50_95"> | mAP50-95: {{ (h.map50_95 * 100).toFixed(1) }}%</template>
+            <template v-if="h.best_model_id"> | <a-tag color="green">已导出模型</a-tag></template>
+          </p>
+          <p v-if="h.error_message" class="text-error">{{ h.error_message }}</p>
+        </a-timeline-item>
+      </a-timeline>
+      <a-empty v-else description="暂无训练历史" :image="Empty.PRESENTED_IMAGE_SIMPLE" />
+    </a-modal>
 
     <!-- Upload Modal -->
     <a-modal v-model:open="showUpload" title="上传模型" :width="500" @ok="handleUpload" :confirm-loading="uploading">
@@ -210,9 +221,10 @@
 import { ref, computed, onMounted, reactive, nextTick } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import { Empty } from 'ant-design-vue'
-import { ReloadOutlined, UploadOutlined, PlusOutlined } from '@ant-design/icons-vue'
+import { ReloadOutlined, UploadOutlined, PlusOutlined, DownloadOutlined, HistoryOutlined } from '@ant-design/icons-vue'
 import { useModelsStore } from '@/stores/models'
 import modelsApi from '@/api/models'
+import trainingApi from '@/api/training'
 import type { TrainedModel } from '@/api/models'
 
 const store = useModelsStore()
@@ -225,9 +237,12 @@ const selectedModel = ref<TrainedModel | null>(null)
 const filterArch = ref<string | null>(null)
 const activating = ref<string | null>(null)
 const showUpload = ref(false)
+const showVersionHistoryModal = ref(false)
+const modelHistory = ref<any[]>([])
 const addingTag = ref(false)
 const newTag = ref('')
 const tagInputRef = ref<HTMLInputElement | null>(null)
+const evalChartOption = ref<any>(null)
 
 const columns = [
   { title: '名称', dataIndex: 'name', key: 'name', width: 180, ellipsis: true },
@@ -254,7 +269,55 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
 }
 
-function selectModel(m: TrainedModel) { selectedModel.value = m }
+function selectModel(m: TrainedModel) {
+  selectedModel.value = m
+  evalChartOption.value = null
+  if (m.training_job_id) {
+    loadModelEvalChart(m.training_job_id)
+  }
+}
+
+async function loadModelEvalChart(jobId: string) {
+  try {
+    const logs: any[] = await trainingApi.getMetrics(jobId)
+    if (!logs.length) return
+    const epochs = logs.map(l => l.epoch)
+    evalChartOption.value = {
+      backgroundColor: 'transparent',
+      tooltip: { trigger: 'axis' },
+      legend: { data: ['Box Loss', 'Cls Loss', 'mAP50', 'mAP50-95'], top: 0, textStyle: { color: '#999', fontSize: 11 } },
+      grid: { top: 36, right: 16, bottom: 24, left: 48, containLabel: false },
+      xAxis: { type: 'category', data: epochs, axisLabel: { color: '#999', fontSize: 11 }, splitLine: { show: false } },
+      yAxis: [
+        { type: 'value', name: 'Loss', axisLabel: { color: '#999', fontSize: 11 }, splitLine: { lineStyle: { color: '#333' } } },
+        { type: 'value', name: 'mAP', axisLabel: { color: '#999', fontSize: 11 }, max: 1, splitLine: { show: false } },
+      ],
+      series: [
+        { name: 'Box Loss', type: 'line', data: logs.map(l => l.train_box_loss), smooth: true, color: '#ff6b6b' },
+        { name: 'Cls Loss', type: 'line', data: logs.map(l => l.train_cls_loss), smooth: true, color: '#ffd93d' },
+        { name: 'mAP50', type: 'line', yAxisIndex: 1, data: logs.map(l => l.map50), smooth: true, color: '#6bcb77' },
+        { name: 'mAP50-95', type: 'line', yAxisIndex: 1, data: logs.map(l => l.map50_95), smooth: true, color: '#4d96ff' },
+      ],
+    }
+  } catch (e) { console.error(e) }
+}
+
+async function showVersionHistory() {
+  if (!selectedModel.value) return
+  showVersionHistoryModal.value = true
+  try {
+    const jobs = await trainingApi.getList({ page_size: 50 })
+    modelHistory.value = jobs.filter((j: any) =>
+      j.best_model_id === selectedModel.value?.id ||
+      j.base_model_architecture === selectedModel.value?.architecture
+    )
+  } catch (e) { console.error(e) }
+}
+
+function handleDownload(m: TrainedModel) {
+  window.open(`/api/v1/models/${m.id}/download`, '_blank')
+  message.success('开始下载...')
+}
 
 async function loadModels() {
   await store.fetchModels({ architecture: filterArch.value || undefined })
@@ -342,4 +405,7 @@ onMounted(() => { loadData() })
 .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
 .header-left { display: flex; align-items: center; gap: 16px; }
 .file-preview { margin-top: 8px; font-size: 13px; color: #52c41a; }
+.eval-chart-container { min-height: 200px; }
+.eval-chart { width: 100%; height: 220px; }
+.timeline-meta { font-size: 12px; color: #999; margin: 2px 0 0; }
 </style>
