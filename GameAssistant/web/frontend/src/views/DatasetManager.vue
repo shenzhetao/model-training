@@ -20,7 +20,7 @@
 
     <a-row :gutter="16">
       <!-- Left: Dataset List -->
-      <a-col :span="8">
+      <a-col :xs="24" :sm="24" :md="8" :lg="8">
         <a-card title="数据集列表" size="small">
           <div v-if="datasets.length > 0" class="dataset-list">
             <div
@@ -48,7 +48,7 @@
       </a-col>
 
       <!-- Right: Dataset Detail + Versions -->
-      <a-col :span="16">
+      <a-col :xs="24" :sm="24" :md="16" :lg="16">
         <!-- No selection -->
         <a-card v-if="!selectedDatasetId" title="数据集详情">
           <a-empty description="从左侧选择一个数据集" />
@@ -57,19 +57,19 @@
         <!-- Dataset Detail -->
         <template v-else>
           <a-card style="margin-bottom: 16px">
-            <a-descriptions :title="selectedDataset?.name" :column="3" size="small">
+            <a-descriptions :title="selectedDataset?.name" :column="{ xs: 1, sm: 2, md: 3 }" size="small">
               <a-descriptions-item label="创建者">{{ selectedDataset?.created_by || '-' }}</a-descriptions-item>
               <a-descriptions-item label="创建时间">
                 {{ selectedDataset ? new Date(selectedDataset.created_at).toLocaleString('zh-CN') : '-' }}
               </a-descriptions-item>
-              <a-descriptions-item label="描述">{{ selectedDataset?.description || '-' }}</a-descriptions-item>
+              <a-descriptions-item label="描述" :span="2">{{ selectedDataset?.description || '-' }}</a-descriptions-item>
             </a-descriptions>
           </a-card>
 
           <!-- Version Tabs -->
           <a-card title="版本管理">
             <template #extra>
-              <a-space>
+              <a-space wrap>
                 <a-button size="small" @click="showAugmentModal = true">
                   <SettingOutlined /> 数据增强
                 </a-button>
@@ -82,14 +82,17 @@
               </a-space>
             </template>
 
-            <a-table
-              v-if="versions.length > 0"
-              :data-source="versions"
-              :columns="versionColumns"
-              :pagination="{ pageSize: 10 }"
-              row-key="id"
-              size="small"
-            >
+            <div class="version-table-wrapper">
+              <a-table
+                v-if="versions.length > 0"
+                :data-source="versions"
+                :columns="versionColumns"
+                :pagination="{ pageSize: 10 }"
+                :scroll="{ x: 600 }"
+                row-key="id"
+                size="small"
+                :responsive="true"
+              >
               <template #bodyCell="{ column, record }">
                 <template v-if="column.key === 'status'">
                   <a-tag :color="getStatusColor(record.status)">
@@ -121,6 +124,7 @@
                 </template>
               </template>
             </a-table>
+            </div>
             <a-empty v-else description="暂无版本，点击上方创建第一个版本" />
           </a-card>
         </template>
@@ -603,4 +607,10 @@ onMounted(async () => {
 .image-select-item img { width: 100%; aspect-ratio: 1; object-fit: cover; }
 .img-info { font-size: 10px; padding: 2px 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; }
 .selected-count { font-size: 13px; color: #52c41a; margin-bottom: 8px; font-weight: 500; }
+.version-table-wrapper { overflow-x: auto; }
+
+@media (max-width: 768px) {
+  .dataset-manager { padding: 12px; }
+  .page-header { flex-direction: column; align-items: flex-start; gap: 12px; }
+}
 </style>

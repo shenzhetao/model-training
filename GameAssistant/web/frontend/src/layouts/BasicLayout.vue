@@ -1,18 +1,51 @@
 <template>
   <a-layout class="basic-layout">
-    <a-layout-header class="header">
-      <div class="logo">
-        <img src="@/assets/logo.svg" alt="GameAssistant" />
-        <span class="logo-text">GameAssistant</span>
+    <!-- Mobile Drawer -->
+    <a-drawer
+      v-model:open="drawerVisible"
+      placement="left"
+      :width="260"
+      :headerStyle="{ display: 'none' }"
+      :bodyStyle="{ padding: 0 }"
+      class="mobile-drawer"
+    >
+      <div class="drawer-header">
+        <img src="@/assets/logo.svg" alt="GameAssistant" class="drawer-logo" />
+        <span class="drawer-title">GameAssistant</span>
       </div>
+      <a-menu
+        v-model:selectedKeys="currentMenu"
+        theme="light"
+        mode="inline"
+        :items="menuItems"
+        @click="handleMenuClick"
+      />
+    </a-drawer>
+
+    <a-layout-header class="header">
+      <div class="header-left">
+        <a-button
+          type="text"
+          class="menu-toggle hide-desktop"
+          @click="drawerVisible = true"
+        >
+          <template #icon><MenuOutlined /></template>
+        </a-button>
+        <div class="logo">
+          <img src="@/assets/logo.svg" alt="GameAssistant" class="logo-img" />
+          <span class="logo-text hide-mobile">GameAssistant</span>
+        </div>
+      </div>
+
       <a-menu
         v-model:selectedKeys="currentMenu"
         theme="dark"
         mode="horizontal"
         :items="menuItems"
         @click="handleMenuClick"
-        class="main-menu"
+        class="main-menu hide-mobile"
       />
+
       <div class="header-right">
         <a-tooltip title="刷新">
           <a-button type="text" class="header-btn" @click="handleRefresh" :loading="refreshing">
@@ -50,10 +83,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { UserOutlined, LogoutOutlined, ReloadOutlined, DownOutlined } from '@ant-design/icons-vue'
+import {
+  UserOutlined, LogoutOutlined, ReloadOutlined,
+  DownOutlined, MenuOutlined,
+} from '@ant-design/icons-vue'
 import { MenuProps } from 'ant-design-vue'
 
 const router = useRouter()
@@ -61,6 +97,7 @@ const route = useRoute()
 const authStore = useAuthStore()
 
 const refreshing = ref(false)
+const drawerVisible = ref(false)
 const username = computed(() => authStore.username)
 
 const menuItems: MenuProps['items'] = [
@@ -70,13 +107,14 @@ const menuItems: MenuProps['items'] = [
   { key: '/datasets', label: '数据集' },
   { key: '/models', label: '模型管理' },
   { key: '/training', label: '训练管理' },
-  { key: '/inference', label: '推理测试' }
+  { key: '/inference', label: '推理测试' },
 ]
 
 const currentMenu = ref<string[]>([route.path])
 
 function handleMenuClick({ key }: { key: string }) {
   router.push(key)
+  drawerVisible.value = false
 }
 
 function handleRefresh() {
@@ -90,8 +128,19 @@ function handleLogout() {
   router.push('/login')
 }
 
+function onResize() {
+  if (window.innerWidth > 768) {
+    drawerVisible.value = false
+  }
+}
+
 onMounted(() => {
   currentMenu.value = [route.path]
+  window.addEventListener('resize', onResize)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', onResize)
 })
 </script>
 
@@ -114,14 +163,30 @@ onMounted(() => {
   box-shadow: 0 1px 8px rgba(0, 0, 0, 0.15);
 }
 
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.menu-toggle {
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 18px;
+}
+
+.menu-toggle:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
 .logo {
   display: flex;
   align-items: center;
-  margin-right: 32px;
+  margin-right: 24px;
   flex-shrink: 0;
 }
 
-.logo img {
+.logo-img {
   height: 28px;
   margin-right: 8px;
 }
@@ -201,6 +266,25 @@ onMounted(() => {
   flex: 1;
 }
 
+/* Drawer */
+.drawer-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 20px;
+  background: #001529;
+}
+
+.drawer-logo {
+  height: 28px;
+}
+
+.drawer-title {
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+}
+
 /* Page transition */
 .page-enter-active {
   transition: opacity 0.2s ease, transform 0.2s ease;
@@ -216,15 +300,38 @@ onMounted(() => {
   opacity: 0;
 }
 
+/* Responsive */
+.hide-mobile {
+  /* shown on desktop */
+}
+
+.hide-desktop {
+  display: none;
+}
+
 @media (max-width: 768px) {
   .header {
     padding: 0 12px;
   }
-  .logo-text {
-    display: none;
+
+  .hide-mobile {
+    display: none !important;
   }
+
+  .hide-desktop {
+    display: flex;
+  }
+
+  .logo {
+    margin-right: 0;
+  }
+
   .content {
     padding: 12px;
+  }
+
+  .drawer-header {
+    padding: 12px 16px;
   }
 }
 </style>

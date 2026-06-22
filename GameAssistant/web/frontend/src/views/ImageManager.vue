@@ -258,16 +258,19 @@
         <div
           v-for="(image, index) in imagesStore.images"
           :key="image.id"
+          :data-id="image.id"
           class="image-card"
           :class="{ selected: imagesStore.selectedIds.has(image.id) }"
           @click="handleImageClick(image, index, $event)"
         >
           <div class="image-thumbnail" @click.stop="openLightbox(index)">
             <img
-              :src="getImageUrl(image.id)"
+              v-if="visibleImages.has(image.id)"
+              :src="getThumbUrl(image.id)"
               :alt="image.original_filename"
               loading="lazy"
             />
+            <div v-else class="img-placeholder" />
             <div class="image-overlay">
               <EyeOutlined />
             </div>
@@ -386,6 +389,39 @@ const isDragOver = ref(false)
 const sourceFilter = ref<string | null>(null)
 const currentPage = ref(1)
 const lightboxRef = ref<HTMLElement | null>(null)
+const visibleImages = ref<Set<string>>(new Set())
+
+// Intersection Observer for lazy loading
+let imageObserver: IntersectionObserver | null = null
+
+function setupImageObserver() {
+  if (imageObserver) imageObserver.disconnect()
+  imageObserver = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting) {
+          const id = (entry.target as HTMLElement).dataset.imageId
+          if (id) visibleImages.value.add(id)
+        }
+      }
+    },
+    { rootMargin: '200px', threshold: 0 }
+  )
+}
+
+function observeImages() {
+  nextTick(() => {
+    const cards = document.querySelectorAll('.image-card[data-id]')
+    cards.forEach((el) => {
+      if (!imageObserver) return
+      const id = el.getAttribute('data-id')
+      if (id && !visibleImages.value.has(id)) {
+        const placeholder = el.querySelector('.img-placeholder')
+        if (placeholder) imageObserver.observe(placeholder)
+      }
+    })
+  })
+}
 
 // Video extraction state
 const videoPanelActive = ref<string[]>([])
@@ -595,6 +631,10 @@ const currentLightboxImage = computed(() => {
 // Methods
 function getImageUrl(id: string): string {
   return imagesApi.getServeUrl(id)
+}
+
+function getThumbUrl(id: string): string {
+  return imagesApi.getThumbnailUrl(id, 400)
 }
 
 function formatFileSize(bytes: number): string {
@@ -807,16 +847,16 @@ async function handleBatchDelete() {
 // Filter and pagination
 function handleSourceFilterChange(value: string | null) {
   imagesStore.setSourceFilter(value)
-  imagesStore.fetchImages({ source: value as any })
+  imagesStore.fetchImages({ source: value as any }).then(() => observeImages())
 }
 
 function handlePageChange(page: number) {
   currentPage.value = page
-  imagesStore.goToPage(page)
+  imagesStore.goToPage(page).then(() => observeImages())
 }
 
 function handleRefresh() {
-  imagesStore.fetchImages()
+  imagesStore.fetchImages().then(() => observeImages())
 }
 
 // Lifecycle
@@ -824,13 +864,14 @@ onMounted(() => {
   imagesStore.fetchImages()
   loadVideos()
   loadActiveTasks()
+  setupImageObserver()
 })
 
 onUnmounted(() => {
   imagesStore.reset()
-  // Clear all polling intervals
   Object.values(pollIntervals).forEach(clearInterval)
   pollIntervals = {}
+  imageObserver?.disconnect()
 })
 </script>
 
@@ -943,8 +984,28 @@ onUnmounted(() => {
 
 .image-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 16px;
+}
+
+@media (max-width: 640px) {
+  .image-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .image-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
 }
 
 .image-card {
@@ -973,6 +1034,22 @@ onUnmounted(() => {
   padding-top: 75%;
   background: #f5f5f5;
   overflow: hidden;
+}
+
+.img-placeholder {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, #f5f5f5 25%, #e8e8e8 50%, #f5f5f5 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }
 
 .image-thumbnail img {
