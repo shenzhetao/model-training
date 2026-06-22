@@ -1,0 +1,76 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: gameassistant_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-gameassistant}
+      MYSQL_USER: ${MYSQL_USER:-gameassistant}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-gameassistant}
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./backend/migrations/sql:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - gameassistant_network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: ../Dockerfile.backend
+    container_name: gameassistant_backend
+    restart: unless-stopped
+    environment:
+      DB_URL: mysql+aiomysql://${MYSQL_USER:-gameassistant}:${MYSQL_PASSWORD:-gameassistant}@mysql:3306/${MYSQL_DATABASE:-gameassistant}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-this-in-production}
+      JWT_ACCESS_TOKEN_EXPIRE_MINUTES: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:-1440}
+      UPLOAD_DIR: /app/uploads
+      TEMPLATE_DIR: /app/templates
+      MODEL_DIR: /app/models
+      DEBUG: ${DEBUG:-false}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:8080}
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      - uploads_data:/app/uploads
+      - templates_data:/app/templates
+      - models_data:/app/models
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - gameassistant_network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: ../Dockerfile.frontend
+    container_name: gameassistant_frontend
+    restart: unless-stopped
+    environment:
+      VITE_API_BASE_URL: /api
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+    depends_on:
+      - backend
+    networks:
+      - gameassistant_network
+
+volumes:
+  mysql_data:
+  uploads_data:
+  templates_data:
+  models_data:
+
+networks:
+  gameassistant_network:
+    driver: bridge
