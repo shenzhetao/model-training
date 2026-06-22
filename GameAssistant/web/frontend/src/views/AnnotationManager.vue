@@ -207,41 +207,45 @@
               </div>
 
               <!-- Annotation List -->
-              <a-divider>已标注</a-divider>
-              <a-table
-                v-if="annotations.length > 0"
-                :data-source="annotations"
-                :columns="annotationColumns"
-                :pagination="{ pageSize: 5 }"
-                size="small"
-                row-key="id"
-              >
-                <template #bodyCell="{ column, record }">
-                  <template v-if="column.key === 'cls'">
-                    <a-tag :color="getClassColor(record.class_id)">
-                      {{ classNameMap[record.class_id] || record.class_id }}
-                    </a-tag>
-                  </template>
-                  <template v-else-if="column.key === 'bbox'">
-                    {{ Math.round(record.bbox_x) }}, {{ Math.round(record.bbox_y) }}
-                    ({{ Math.round(record.bbox_width) }} x {{ Math.round(record.bbox_height) }})
-                  </template>
-                  <template v-else-if="column.key === 'conf'">
-                    <span v-if="record.conf">
-                      {{ (record.conf * 100).toFixed(1) }}%
-                    </span>
-                    <span v-else>-</span>
-                  </template>
-                  <template v-else-if="column.key === 'action'">
-                    <a-space>
-                      <a-button type="link" size="small" danger @click="removeAnnotation(record.id)">
-                        删除
-                      </a-button>
-                    </a-space>
-                  </template>
-                </template>
-              </a-table>
-              <a-empty v-else description="暂无标注" :image="Empty.PRESENTED_IMAGE_SIMPLE" />
+              <a-divider>已标注 ({{ annotations.length }})</a-divider>
+              <div class="annotation-list-container" ref="annotationListRef" @scroll="onAnnotationScroll">
+                <div
+                  v-if="annotations.length > 0"
+                  class="annotation-list"
+                  :style="{ height: `${annotations.length * rowHeight}px`, position: 'relative' }"
+                >
+                  <div
+                    v-for="(ann, idx) in visibleAnnotations"
+                    :key="ann.id"
+                    class="annotation-row"
+                    :style="{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      height: `${rowHeight}px`,
+                      transform: `translateY(${getRowOffset(idx)}px)`,
+                    }"
+                  >
+                    <div class="ann-col ann-class">
+                      <a-tag :color="getClassColor(ann.class_id)">
+                        {{ classNameMap[ann.class_id] || ann.class_id?.slice(0, 8) }}
+                      </a-tag>
+                    </div>
+                    <div class="ann-col ann-bbox">
+                      {{ Math.round(ann.bbox_x) }},{{ Math.round(ann.bbox_y) }}
+                      ({{ Math.round(ann.bbox_width) }}x{{ Math.round(ann.bbox_height) }})
+                    </div>
+                    <div class="ann-col ann-conf">
+                      {{ ann.conf ? (ann.conf * 100).toFixed(1) + '%' : '-' }}
+                    </div>
+                    <div class="ann-col ann-action">
+                      <a-button type="link" size="small" danger @click="removeAnnotation(ann.id)">删除</a-button>
+                    </div>
+                  </div>
+                </div>
+                <a-empty v-else description="暂无标注" :image="Empty.PRESENTED_IMAGE_SIMPLE" />
+              </div>
             </a-card>
           </a-col>
         </a-row>
@@ -591,6 +595,8 @@ const selectedClassId = ref<string | null>(null)
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const canvasContainer = ref<HTMLDivElement | null>(null)
+const annotationListRef = ref<HTMLElement | null>(null)
+const rowHeight = 40
 
 let isDrawing = false
 let drawStartX = 0
@@ -598,6 +604,24 @@ let drawStartY = 0
 let scale = 1
 let offsetX = 0
 let offsetY = 0
+
+const scrollTop = ref(0)
+const viewHeight = ref(300)
+
+const visibleAnnotations = computed(() => {
+  const start = Math.max(0, Math.floor(scrollTop.value / rowHeight) - 2)
+  const end = Math.min(annotations.value.length, Math.ceil((scrollTop.value + viewHeight.value) / rowHeight) + 2)
+  return annotations.value.slice(start, end)
+})
+
+function getRowOffset(index: number): number {
+  return index * rowHeight
+}
+
+function onAnnotationScroll(e: Event) {
+  const el = e.target as HTMLElement
+  scrollTop.value = el.scrollTop
+}
 
 const annotationColumns = [
   { title: '类别', key: 'cls', width: 120 },
@@ -1099,4 +1123,43 @@ onUnmounted(() => {
   margin-top: 8px;
   text-align: center;
 }
-</style>
+
+/* Annotation list — virtual scroll */
+.annotation-list-container {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.annotation-list {
+  /* height set inline via style */
+}
+
+.annotation-row {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid #f0f0f0;
+  padding: 0 8px;
+  box-sizing: border-box;
+  transition: background 0.15s;
+}
+
+.annotation-row:hover {
+  background: #f5f5f5;
+}
+
+.ann-col {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 4px;
+}
+
+.ann-class { flex: 0 0 120px; }
+.ann-bbox { flex: 1; font-size: 12px; color: #666; }
+.ann-conf { flex: 0 0 60px; font-size: 12px; color: #999; text-align: center; }
+.ann-action { flex: 0 0 60px; text-align: right; }
+
+@media (max-width: 768px) {
+  .annotation-manager { padding: 12px; }
+  .page-header { flex-direction: column; align-items: flex-start; gap: 12px; }
+}
