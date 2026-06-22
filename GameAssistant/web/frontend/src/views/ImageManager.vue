@@ -27,6 +27,164 @@
       </div>
     </div>
 
+    <!-- Video Extraction Panel -->
+    <a-collapse v-model:activeKey="videoPanelActive" class="video-panel">
+      <a-collapse-panel key="video" header="视频抽帧">
+        <template #extra><VideoCameraOutlined /></template>
+        <div class="video-extraction">
+          <a-row :gutter="16">
+            <a-col :span="12">
+              <!-- Video Upload -->
+              <div class="video-upload-section">
+                <a-typography-title :level="5">1. 上传视频</a-typography-title>
+                <a-upload
+                  :before-upload="handleVideoSelect"
+                  :show-upload-list="false"
+                  accept=".mp4,.avi,.mkv,.mov,.wmv,.flv,.webm"
+                  :disabled="uploadingVideo"
+                >
+                  <a-button type="primary" :loading="uploadingVideo">
+                    <template #icon><UploadOutlined /></template>
+                    选择视频文件
+                  </a-button>
+                </a-upload>
+                <p class="upload-hint">支持 MP4, AVI, MKV, MOV 等格式，最大 10GB</p>
+              </div>
+
+              <!-- Video List -->
+              <div v-if="videos.length > 0" class="video-list-section">
+                <a-typography-title :level="5">已上传视频</a-typography-title>
+                <a-list
+                  size="small"
+                  :data-source="videos"
+                  :pagination="{ pageSize: 5 }"
+                >
+                  <template #renderItem="{ item }">
+                    <a-list-item>
+                      <a-list-item-meta>
+                        <template #title>
+                          <span class="video-name" :class="{ selected: selectedVideoId === item.id }" @click="selectVideo(item)">
+                            {{ item.original_filename }}
+                          </span>
+                        </template>
+                        <template #description>
+                          {{ item.duration.toFixed(1) }}s | {{ item.width }}x{{ item.height }} | {{ formatFileSize(item.file_size) }}
+                        </template>
+                      </a-list-item-meta>
+                      <template #actions>
+                        <a-button type="link" danger size="small" @click="handleDeleteVideo(item.id)">
+                          <DeleteOutlined />
+                        </a-button>
+                      </template>
+                    </a-list-item>
+                  </template>
+                </a-list>
+              </div>
+            </a-col>
+
+            <a-col :span="12">
+              <!-- Extraction Settings -->
+              <div class="extraction-settings">
+                <a-typography-title :level="5">2. 抽帧配置</a-typography-title>
+                
+                <a-form :model="extractionConfig" layout="vertical">
+                  <a-form-item label="抽帧策略">
+                    <a-radio-group v-model:value="extractionConfig.strategy">
+                      <a-radio value="interval">按时间间隔</a-radio>
+                      <a-radio value="count">固定数量</a-radio>
+                      <a-radio value="scene_change">场景变化</a-radio>
+                    </a-radio-group>
+                  </a-form-item>
+
+                  <a-form-item 
+                    v-if="extractionConfig.strategy === 'interval'" 
+                    label="间隔（秒）"
+                  >
+                    <a-input-number
+                      v-model:value="extractionConfig.intervalSeconds"
+                      :min="0.1"
+                      :max="3600"
+                      :step="0.1"
+                      style="width: 100%"
+                    />
+                    <p class="config-hint">每隔 N 秒抽取一帧</p>
+                  </a-form-item>
+
+                  <a-form-item 
+                    v-if="extractionConfig.strategy === 'count'" 
+                    label="抽帧数量"
+                  >
+                    <a-input-number
+                      v-model:value="extractionConfig.frameCount"
+                      :min="1"
+                      :max="10000"
+                      style="width: 100%"
+                    />
+                    <p class="config-hint">均匀抽取 N 帧</p>
+                  </a-form-item>
+
+                  <a-form-item 
+                    v-if="extractionConfig.strategy === 'scene_change'" 
+                    label="场景变化阈值"
+                  >
+                    <a-slider
+                      v-model:value="extractionConfig.sceneThreshold"
+                      :min="0.05"
+                      :max="1"
+                      :step="0.05"
+                      :marks="{ 0.05: '低', 0.3: '中', 0.6: '高', 1: '最高' }"
+                    />
+                    <p class="config-hint">帧间差异超过此阈值时抽取（值越低越敏感）</p>
+                  </a-form-item>
+                </a-form>
+
+                <!-- Start Extraction Button -->
+                <a-button
+                  type="primary"
+                  :disabled="!selectedVideoId || startingExtraction"
+                  :loading="startingExtraction"
+                  @click="startExtraction"
+                  block
+                >
+                  <template #icon><PlayCircleOutlined /></template>
+                  开始抽帧
+                </a-button>
+              </div>
+            </a-col>
+          </a-row>
+
+          <!-- Active Tasks -->
+          <a-divider>抽帧任务</a-divider>
+          <div class="extraction-tasks">
+            <a-empty v-if="activeTasks.length === 0" description="暂无进行中的抽帧任务" />
+            <a-list v-else size="small" :data-source="activeTasks">
+              <template #renderItem="{ item }">
+                <a-list-item>
+                  <a-list-item-meta>
+                    <template #title>
+                      <span :class="getTaskStatusClass(item.status)">
+                        {{ getTaskStatusText(item.status) }}
+                      </span>
+                      <span class="task-info"> | {{ item.strategy }}</span>
+                    </template>
+                    <template #description>
+                      <a-progress
+                        v-if="item.total_frames"
+                        :percent="Math.round((item.extracted_frames / item.total_frames) * 100)"
+                        :status="item.status === 'failed' ? 'exception' : undefined"
+                        size="small"
+                      />
+                      <span v-else>等待开始...</span>
+                    </template>
+                  </a-list-item-meta>
+                </a-list-item>
+              </template>
+            </a-list>
+          </div>
+        </div>
+      </a-collapse-panel>
+    </a-collapse>
+
     <!-- Upload Area -->
     <div
       class="upload-area"
@@ -209,10 +367,17 @@ import {
   InboxOutlined,
   LeftOutlined,
   RightOutlined,
+  VideoCameraOutlined,
+  PlayCircleOutlined,
 } from '@ant-design/icons-vue'
 import { useImagesStore } from '@/stores/images'
 import type { ImageResponse } from '@/api/images'
 import imagesApi from '@/api/images'
+import videosApi, { 
+  type SourceVideoResponse, 
+  type ExtractionTaskResponse,
+  type ExtractionStrategy 
+} from '@/api/videos'
 
 const imagesStore = useImagesStore()
 
@@ -221,6 +386,196 @@ const isDragOver = ref(false)
 const sourceFilter = ref<string | null>(null)
 const currentPage = ref(1)
 const lightboxRef = ref<HTMLElement | null>(null)
+
+// Video extraction state
+const videoPanelActive = ref<string[]>([])
+const videos = ref<SourceVideoResponse[]>([])
+const selectedVideoId = ref<string | null>(null)
+const uploadingVideo = ref(false)
+const startingExtraction = ref(false)
+const activeTasks = ref<ExtractionTaskResponse[]>([])
+const extractionConfig = ref({
+  strategy: 'interval' as 'interval' | 'count' | 'scene_change',
+  intervalSeconds: 1,
+  frameCount: 100,
+  sceneThreshold: 0.3,
+})
+
+// Load videos on mount
+async function loadVideos() {
+  try {
+    const response = await videosApi.getList({ page_size: 100 })
+    videos.value = response.items
+  } catch (error) {
+    console.error('Failed to load videos:', error)
+  }
+}
+
+// Load active tasks
+async function loadActiveTasks() {
+  try {
+    const response = await videosApi.getExtractionTaskList({ page_size: 50 })
+    // Filter to show only pending/running tasks
+    activeTasks.value = response.items.filter(
+      (task: ExtractionTaskResponse) => ['pending', 'running'].includes(task.status)
+    )
+  } catch (error) {
+    console.error('Failed to load tasks:', error)
+  }
+}
+
+// Video upload handler
+async function handleVideoSelect(file: File) {
+  const validExtensions = ['.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', '.webm']
+  const ext = '.' + file.name.toLowerCase().split('.').pop()
+  if (!validExtensions.includes(ext)) {
+    message.error('不支持的视频格式')
+    return false
+  }
+  if (file.size > 10 * 1024 * 1024 * 1024) {
+    message.error('视频文件大小不能超过 10GB')
+    return false
+  }
+
+  uploadingVideo.value = true
+  try {
+    const response = await videosApi.upload(file)
+    if (response.success && response.video) {
+      message.success('视频上传成功')
+      videos.value.unshift(response.video)
+      selectedVideoId.value = response.video.id
+    }
+  } catch (error: any) {
+    message.error(error?.response?.data?.detail || '视频上传失败')
+  } finally {
+    uploadingVideo.value = false
+  }
+  return false
+}
+
+// Select video
+function selectVideo(video: SourceVideoResponse) {
+  selectedVideoId.value = video.id
+}
+
+// Delete video
+async function handleDeleteVideo(videoId: string) {
+  Modal.confirm({
+    title: '确认删除',
+    content: '确定要删除这个视频吗？抽帧产生的图片不会被删除。',
+    okText: '删除',
+    okType: 'danger',
+    async onOk() {
+      try {
+        await videosApi.delete(videoId)
+        message.success('视频已删除')
+        videos.value = videos.value.filter(v => v.id !== videoId)
+        if (selectedVideoId.value === videoId) {
+          selectedVideoId.value = null
+        }
+      } catch (error) {
+        message.error('删除失败')
+      }
+    },
+  })
+}
+
+// Start extraction
+async function startExtraction() {
+  if (!selectedVideoId.value) {
+    message.warning('请先选择一个视频')
+    return
+  }
+
+  startingExtraction.value = true
+  try {
+    const taskData = {
+      strategy: extractionConfig.value.strategy as ExtractionStrategy,
+    } as {
+      strategy: ExtractionStrategy
+      interval_seconds?: number
+      frame_count?: number
+      scene_threshold?: number
+    }
+    if (extractionConfig.value.strategy === 'interval') {
+      taskData.interval_seconds = extractionConfig.value.intervalSeconds
+    } else if (extractionConfig.value.strategy === 'count') {
+      taskData.frame_count = extractionConfig.value.frameCount
+    } else if (extractionConfig.value.strategy === 'scene_change') {
+      taskData.scene_threshold = extractionConfig.value.sceneThreshold
+    }
+
+    const response = await videosApi.createExtractionTask(selectedVideoId.value, taskData)
+    if (response.success && response.task) {
+      message.success('抽帧任务已启动')
+      activeTasks.value.unshift(response.task)
+      // Start polling for task status
+      pollTaskStatus(response.task.id)
+    }
+  } catch (error: any) {
+    message.error(error?.response?.data?.detail || '创建抽帧任务失败')
+  } finally {
+    startingExtraction.value = false
+  }
+}
+
+// Poll task status
+let pollIntervals: Record<string, number> = {}
+function pollTaskStatus(taskId: string) {
+  if (pollIntervals[taskId]) return
+  
+  pollIntervals[taskId] = window.setInterval(async () => {
+    try {
+      const task = await videosApi.getExtractionTask(taskId)
+      const index = activeTasks.value.findIndex(t => t.id === taskId)
+      if (index >= 0) {
+        if (task.status === 'completed' || task.status === 'failed') {
+          // Task finished
+          activeTasks.value.splice(index, 1)
+          clearInterval(pollIntervals[taskId])
+          delete pollIntervals[taskId]
+          
+          if (task.status === 'completed') {
+            message.success(`抽帧完成！共提取 ${task.extracted_frames} 张图片`)
+            // Refresh images to show new frames
+            imagesStore.fetchImages({ source: 'video' })
+          } else {
+            message.error(`抽帧失败: ${task.error_message}`)
+          }
+        } else {
+          // Update task progress
+          activeTasks.value[index] = task
+        }
+      } else {
+        // Task no longer in active list, stop polling
+        clearInterval(pollIntervals[taskId])
+        delete pollIntervals[taskId]
+      }
+    } catch (error) {
+      console.error('Failed to poll task status:', error)
+    }
+  }, 2000)
+}
+
+function getTaskStatusClass(status: string): string {
+  const classes: Record<string, string> = {
+    pending: 'status-pending',
+    running: 'status-running',
+    completed: 'status-completed',
+    failed: 'status-failed',
+  }
+  return classes[status] || ''
+}
+
+function getTaskStatusText(status: string): string {
+  const texts: Record<string, string> = {
+    pending: '等待中',
+    running: '抽帧中',
+    completed: '已完成',
+    failed: '失败',
+  }
+  return texts[status] || status
+}
 
 // Computed
 const lightboxVisible = computed({
@@ -269,7 +624,7 @@ function getSourceLabel(source: string): string {
 }
 
 // Upload handlers
-const handleFileSelect: UploadProps['beforeUpload'] = async (file: File) => {
+const handleFileSelect: UploadProps['beforeUpload'] = async (file: File, _fileList: unknown) => {
   if (!isValidImageFile(file.name)) {
     message.error('不支持的文件格式')
     return false
@@ -296,7 +651,7 @@ const handleFileSelect: UploadProps['beforeUpload'] = async (file: File) => {
   return false
 }
 
-const handleZipSelect: UploadProps['beforeUpload'] = async (file: File) => {
+const handleZipSelect: UploadProps['beforeUpload'] = async (file: File, _fileList: unknown) => {
   if (!file.name.toLowerCase().endsWith('.zip')) {
     message.error('请选择 ZIP 文件')
     return false
@@ -343,9 +698,9 @@ function handleDrop(e: DragEvent) {
 
   const file = files[0]
   if (file.name.toLowerCase().endsWith('.zip')) {
-    handleZipSelect(file)
+    ;(handleZipSelect as (file: File) => boolean | PromiseLike<boolean>)(file)
   } else {
-    handleFileSelect(file)
+    ;(handleFileSelect as (file: File) => boolean | PromiseLike<boolean>)(file)
   }
 }
 
@@ -438,7 +793,7 @@ async function handleBatchDelete() {
     okType: 'danger',
     async onOk() {
       try {
-        const response = await imagesStore.deleteSelected()
+        const response = await imagesStore.deleteSelected() as { success: boolean; deleted_count: number }
         if (response.success) {
           message.success(`成功删除 ${response.deleted_count} 张图片`)
         }
@@ -467,10 +822,15 @@ function handleRefresh() {
 // Lifecycle
 onMounted(() => {
   imagesStore.fetchImages()
+  loadVideos()
+  loadActiveTasks()
 })
 
 onUnmounted(() => {
   imagesStore.reset()
+  // Clear all polling intervals
+  Object.values(pollIntervals).forEach(clearInterval)
+  pollIntervals = {}
 })
 </script>
 
@@ -780,5 +1140,78 @@ onUnmounted(() => {
 
 .lightbox-actions :deep(.ant-btn:hover) {
   color: #ff4d4f;
+}
+
+/* Video Extraction Panel */
+.video-panel {
+  margin-bottom: 24px;
+}
+
+.video-extraction {
+  padding: 8px 0;
+}
+
+.video-upload-section,
+.video-list-section,
+.extraction-settings {
+  margin-bottom: 24px;
+}
+
+.upload-hint {
+  font-size: 12px;
+  color: #999;
+  margin-top: 8px;
+}
+
+.config-hint {
+  font-size: 12px;
+  color: #999;
+  margin-top: 4px;
+}
+
+.video-list-section {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.video-name {
+  cursor: pointer;
+  transition: color 0.3s;
+}
+
+.video-name:hover {
+  color: #1890ff;
+}
+
+.video-name.selected {
+  color: #1890ff;
+  font-weight: bold;
+}
+
+.extraction-tasks {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+/* Task status styles */
+.status-pending {
+  color: #999;
+}
+
+.status-running {
+  color: #1890ff;
+}
+
+.status-completed {
+  color: #52c41a;
+}
+
+.status-failed {
+  color: #ff4d4f;
+}
+
+.task-info {
+  color: #999;
+  font-size: 12px;
 }
 </style>

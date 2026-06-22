@@ -1,4 +1,5 @@
 import request from './request'
+import type { AxiosProgressEvent } from 'axios'
 
 export interface ImageResponse {
   id: string
@@ -70,7 +71,7 @@ export const imagesApi = {
     if (params.source) queryParams.set('source', params.source)
 
     const query = queryParams.toString()
-    return request.get(`/images/${query ? `?${query}` : ''}`)
+    return request.get(`/images${query ? `?${query}` : ''}`)
   },
 
   /**
@@ -97,8 +98,8 @@ export const imagesApi = {
         'Content-Type': 'multipart/form-data',
       },
       onUploadProgress: onProgress
-        ? (progressEvent: ProgressEvent) => {
-            const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total)
+        ? (progressEvent: AxiosProgressEvent) => {
+            const percent = Math.round((progressEvent.loaded * 100) / (progressEvent.total || 1))
             onProgress(percent)
           }
         : undefined,
@@ -122,8 +123,8 @@ export const imagesApi = {
         'Content-Type': 'multipart/form-data',
       },
       onUploadProgress: onProgress
-        ? (progressEvent: ProgressEvent) => {
-            const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total)
+        ? (progressEvent: AxiosProgressEvent) => {
+            const percent = Math.round((progressEvent.loaded * 100) / (progressEvent.total || 1))
             onProgress(percent)
           }
         : undefined,

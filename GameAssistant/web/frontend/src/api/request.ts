@@ -1,12 +1,12 @@
-import axios, { type AxiosInstance, type AxiosError, type InternalAxiosRequestConfig, type AxiosResponse, type AxiosRequestConfig } from 'axios'
+import axios, { type AxiosError, type InternalAxiosRequestConfig, type AxiosResponse, type AxiosRequestConfig, type AxiosProgressEvent } from 'axios'
 import { useAuthStore } from '@/stores/auth'
 import { message } from 'ant-design-vue'
 
 export interface RequestConfig extends AxiosRequestConfig {
-  onUploadProgress?: (progressEvent: ProgressEvent) => void
+  onUploadProgress?: (progressEvent: AxiosProgressEvent) => void
 }
 
-const _request: AxiosInstance = axios.create({
+const api = axios.create({
   baseURL: '/api/v1',
   timeout: 300000, // 5 minutes for large file uploads
   headers: {
@@ -14,7 +14,7 @@ const _request: AxiosInstance = axios.create({
   },
 })
 
-_request.interceptors.request.use(
+api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     const authStore = useAuthStore()
     if (authStore.token) {
@@ -27,7 +27,7 @@ _request.interceptors.request.use(
   }
 )
 
-_request.interceptors.response.use(
+api.interceptors.response.use(
   (response: AxiosResponse) => {
     return response.data
   },
@@ -70,18 +70,25 @@ _request.interceptors.response.use(
   }
 )
 
-const request: AxiosInstance = _request as unknown as AxiosInstance
-
-request.post = function<T = any>(url: string, data?: any, config?: RequestConfig): Promise<T> {
-  return _request.post(url, data, config as AxiosRequestConfig)
+interface RequestMethods {
+  post<T = any>(url: string, data?: any, config?: RequestConfig): Promise<T>
+  get<T = any>(url: string, config?: RequestConfig): Promise<T>
+  delete<T = any>(url: string, config?: RequestConfig): Promise<T>
+  put<T = any>(url: string, data?: any, config?: RequestConfig): Promise<T>
+  patch<T = any>(url: string, data?: any, config?: RequestConfig): Promise<T>
 }
 
-request.delete = function<T = any>(url: string, config?: RequestConfig): Promise<T> {
-  return _request.delete(url, config as AxiosRequestConfig)
-}
-
-request.get = function<T = any>(url: string, config?: RequestConfig): Promise<T> {
-  return _request.get(url, config as AxiosRequestConfig)
+const request: RequestMethods = {
+  post: <T>(url: string, data?: any, config?: RequestConfig) =>
+    api.post<T>(url, data, config as AxiosRequestConfig) as Promise<T>,
+  get: <T>(url: string, config?: RequestConfig) =>
+    api.get<T>(url, config as AxiosRequestConfig) as Promise<T>,
+  delete: <T>(url: string, config?: RequestConfig) =>
+    api.delete<T>(url, config as AxiosRequestConfig) as Promise<T>,
+  put: <T>(url: string, data?: any, config?: RequestConfig) =>
+    api.put<T>(url, data, config as AxiosRequestConfig) as Promise<T>,
+  patch: <T>(url: string, data?: any, config?: RequestConfig) =>
+    api.patch<T>(url, data, config as AxiosRequestConfig) as Promise<T>,
 }
 
 export default request

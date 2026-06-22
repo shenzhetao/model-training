@@ -78,8 +78,8 @@ const formState = reactive({
 async function handleLogin() {
   loading.value = true
   try {
-    const response = await request.post('/auth/login', formState)
-    authStore.setAuth(response.access_token, response.user)
+    const response = await request.post<{ access_token: string; user: unknown }>('/auth/login', formState)
+    authStore.setAuth(response.access_token, response.user as any)
     const redirect = route.query.redirect as string || '/images'
     router.push(redirect)
     message.success('登录成功')

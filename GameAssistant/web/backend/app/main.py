@@ -38,6 +38,7 @@ app.add_middleware(
 # Mount static files directory for uploads
 os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 os.makedirs(os.path.join(settings.UPLOAD_DIR, "images"), exist_ok=True)
+os.makedirs(os.path.join(settings.UPLOAD_DIR, "videos"), exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
 
 # Mount templates directory
