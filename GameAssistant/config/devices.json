@@ -1,0 +1,26 @@
+{
+  "reference_resolution": [1080, 1920],
+  "devices": {
+    "huawei-nova-5-pro": {
+      "width": 1080,
+      "height": 2244,
+      "density": 2.75,
+      "note": "采集设备"
+    },
+    "xiaomi-13": {
+      "width": 1080,
+      "height": 2400,
+      "density": 3.0
+    },
+    "samsung-galaxy-s22": {
+      "width": 1080,
+      "height": 2340,
+      "density": 3.0
+    },
+    "pixel-6": {
+      "width": 1080,
+      "height": 2400,
+      "density": 2.625
+    }
+  }
+}

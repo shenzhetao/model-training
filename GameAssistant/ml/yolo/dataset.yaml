@@ -1,0 +1,13 @@
+# YOLO 数据集配置文件
+# path 字段在 ultralytics 中是相对 CWD（训练时所在目录）解析的，
+# 不是相对 yaml 文件所在目录。为了避免歧义，使用绝对路径。
+# 该绝对路径会随项目位置变化，但 train_yolo.py 启动时会自动改写。
+# split_dataset.py 会把数据放到 ml/yolo/datasets/{images,labels}/{train,val}/
+
+path: C:/project/model-training/GameAssistant/ml/yolo/datasets
+train: images/train
+val: images/val
+
+nc: 1
+names:
+  0: quest_marker

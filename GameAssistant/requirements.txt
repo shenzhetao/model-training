@@ -1,0 +1,16 @@
+# YOLO 训练必需依赖（精简版）
+# 与 game-helper/venv 已安装版本对齐
+
+# 核心 ML
+ultralytics>=8.1.40
+torch>=2.3.0
+torchvision>=0.18.0
+
+# 基础图像处理
+opencv-python>=4.9.0
+numpy>=1.26.4
+Pillow>=10.2.0
+PyYAML>=6.0.1
+
+# 标注工具（训练前手动安装）
+# labelImg==1.8.6

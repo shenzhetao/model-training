@@ -1,0 +1,27 @@
+game:
+  name: "冒险岛类-仿品"
+  package_name: "com.example.maplestory"
+
+  skill_slots:
+    count: 8
+    bar_roi: [0.05, 0.78, 0.90, 0.15]
+
+  ui_rois:
+    btn_attack:
+      roi: [0.75, 0.88, 0.20, 0.10]
+      states: ["normal"]
+    hp_bar_player:
+      roi: [0.02, 0.02, 0.30, 0.08]
+      states: ["normal"]
+    dialog_next:
+      roi: [0.70, 0.80, 0.25, 0.12]
+      states: ["with_arrow"]
+
+  yolo_classes:
+    - name: quest_marker
+      description: "NPC 头顶 ?/! 标记"
+
+detection:
+  template_threshold: 0.85
+  yolo_conf: 0.4
+  yolo_model: "ml/weights/yolo/best.pt"
