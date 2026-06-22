@@ -147,6 +147,32 @@ async def activate_model(
     return {"success": True, "message": f"Model '{m.name}' set as active"}
 
 
+@router.get("/{model_id}/download")
+async def download_model(
+    model_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Download a trained model file."""
+    import os
+    from fastapi.responses import FileResponse
+
+    m = await model_crud.get(db, model_id)
+    if not m or m.is_deleted:
+        raise HTTPException(status_code=404, detail="Model not found")
+
+    file_path = m.file_path
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Model file not found on server")
+
+    filename = os.path.basename(file_path)
+    return FileResponse(
+        path=file_path,
+        filename=filename,
+        media_type="application/octet-stream",
+    )
+
+
 @router.get("/stats/overview", response_model=ModelStatsResponse)
 async def get_model_stats(
     db: AsyncSession = Depends(get_db),
