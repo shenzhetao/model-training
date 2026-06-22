@@ -508,4 +508,16 @@ onUnmounted(() => { adbStore.reset(); infStore.reset() })
 .conf-value { text-align: center; color: #1890ff; font-weight: 500; }
 .video-preview { width: 100%; max-height: 480px; border-radius: 8px; }
 .image-preview { width: 100%; max-height: 480px; object-fit: contain; border-radius: 8px; }
+
+@media (max-width: 768px) {
+  .inference-playground { padding: 12px; }
+  .page-header { flex-direction: column; align-items: flex-start; gap: 12px; }
+  .screenshot-container { min-height: 240px; }
+  .placeholder-icon { font-size: 40px; }
+}
+
+@media (max-width: 576px) {
+  .screenshot-container { min-height: 180px; }
+  .placeholder-icon { font-size: 32px; }
+}
 </style>

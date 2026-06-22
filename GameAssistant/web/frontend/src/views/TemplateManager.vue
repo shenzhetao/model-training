@@ -21,7 +21,7 @@
 
     <a-row :gutter="16">
       <!-- Left: Template Tree -->
-      <a-col :span="8">
+      <a-col :xs="24" :sm="24" :md="8">
         <a-card title="模板目录" size="small">
           <a-tree
             v-if="treeData.length > 0"
@@ -43,10 +43,10 @@
       </a-col>
 
       <!-- Right: Template Grid + Test -->
-      <a-col :span="16">
+      <a-col :xs="24" :sm="24" :md="16">
         <a-row :gutter="16">
           <!-- Template Grid -->
-          <a-col :span="14">
+          <a-col :xs="24" :sm="24" :md="24" :lg="14">
             <a-card title="模板列表" size="small">
               <template #extra>
                 <a-space>
@@ -104,7 +104,7 @@
           </a-col>
 
           <!-- Right Panel: Detail / Test -->
-          <a-col :span="10">
+          <a-col :xs="24" :sm="24" :md="24" :lg="10">
             <!-- Large Preview -->
             <a-card title="模板预览" size="small" style="margin-bottom: 16px">
               <div v-if="selectedTemplate" class="preview-container" @click="showPreviewModal = true">
@@ -505,4 +505,19 @@ onMounted(() => { loadTemplates() })
 .preview-container:hover .preview-overlay { opacity: 1; }
 .preview-icon { font-size: 14px; }
 .switch-label { margin-left: 8px; font-size: 13px; color: #666; }
+
+@media (max-width: 768px) {
+  .template-manager { padding: 12px; }
+  .page-header { flex-direction: column; align-items: flex-start; gap: 12px; }
+  .header-left { flex-wrap: wrap; }
+  .template-grid { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); }
+  .preview-container { max-height: 160px; }
+  .preview-thumb { max-height: 160px; }
+}
+
+@media (max-width: 576px) {
+  .template-grid { grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 8px; }
+  .template-name { font-size: 11px; }
+  .template-size { display: none; }
+}
 </style>
