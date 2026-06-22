@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import datasetsApi, { type Dataset, type DatasetVersion, type VersionStats } from '@/api/datasets'
+import request from '@/api/request'
 
 export const useDatasetsStore = defineStore('datasets', () => {
   const datasets = ref<Dataset[]>([])
@@ -54,7 +55,18 @@ export const useDatasetsStore = defineStore('datasets', () => {
   async function generateYolo(datasetId: string, versionId: string) {
     generating.value = true
     try {
-      window.open(datasetsApi.getGenerateYoloUrl(datasetId, versionId), '_blank')
+      const resp = await request.post(`/datasets/${datasetId}/versions/${versionId}/generate-yolo`, null, {
+        responseType: 'blob',
+      })
+      const blob = new Blob([resp], { type: 'application/zip' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `yolo_dataset_${versionId.slice(0, 8)}.zip`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      console.error(e)
     } finally {
       generating.value = false
     }

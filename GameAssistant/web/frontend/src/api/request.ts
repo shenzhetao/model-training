@@ -29,6 +29,10 @@ api.interceptors.request.use(
 
 api.interceptors.response.use(
   (response: AxiosResponse) => {
+    // For blob responses, return the raw response object so callers can access response.data
+    if (response.config.responseType === 'blob') {
+      return response
+    }
     return response.data
   },
   async (error: AxiosError) => {

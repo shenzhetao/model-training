@@ -354,10 +354,11 @@ async def get_image(
 @router.get("/{image_id}/serve")
 async def serve_image(
     image_id: str,
+    size: int = Query(default=None, ge=16, le=1024, description="Resize image to this max dimension"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Stream image file for viewing."""
+    """Stream image file for viewing, optionally resized."""
     image = await image_crud.get(db, image_id)
     if not image or image.is_deleted:
         raise HTTPException(
@@ -373,7 +374,6 @@ async def serve_image(
             detail="Image file not found on disk"
         )
 
-    # Determine content type
     ext = get_file_extension(image.filename)
     content_types = {
         '.jpg': 'image/jpeg',
@@ -384,6 +384,36 @@ async def serve_image(
         '.webp': 'image/webp',
     }
     content_type = content_types.get(ext, 'application/octet-stream')
+
+    # Resize if size parameter is provided
+    if size is not None:
+        try:
+            from PIL import Image
+            with Image.open(full_path) as img:
+                img.thumbnail((size, size), Image.LANCZOS)
+                buf = io.BytesIO()
+                img_format = 'JPEG' if ext in ('.jpg', '.jpeg') else ext.lstrip('.').upper()
+                if img_format == 'JPG':
+                    img_format = 'JPEG'
+                img.save(buf, format=img_format, quality=85)
+                buf.seek(0)
+                content_type = content_types.get(ext, 'image/jpeg')
+
+                def iterfile():
+                    while chunk := buf.read(8192):
+                        yield chunk
+
+                return StreamingResponse(
+                    iterfile(),
+                    media_type=content_type,
+                    headers={
+                        "Content-Disposition": f'inline; filename="{image.original_filename}"',
+                        "Cache-Control": "public, max-age=86400",
+                    }
+                )
+        except Exception:
+            # Fallback to original if resize fails
+            pass
 
     def iterfile():
         with open(full_path, "rb") as f:
