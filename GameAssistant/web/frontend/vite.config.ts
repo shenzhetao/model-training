@@ -11,6 +11,7 @@ export default defineConfig({
     Components({
       resolvers: [
         AntDesignVueResolver({
+          // CSS-in-JS mode (default for v4)
           importStyle: false,
         }),
       ],
@@ -40,23 +41,30 @@ export default defineConfig({
     sourcemap: false,
     rollupOptions: {
       output: {
-        manualChunks: {
+        manualChunks(id) {
           // Vue core
-          'vue-vendor': ['vue', 'vue-router', 'pinia'],
+          if (id.includes('node_modules/vue/') ||
+              id.includes('node_modules/@vue/') ||
+              id.includes('node_modules/pinia/')) {
+            return 'vue-vendor'
+          }
           // Axios
-          'axios': ['axios'],
-          // ECharts: let Vite tree-shake unused components automatically
-          // vue-echarts and echarts/core handle on-demand imports via main.ts
+          if (id.includes('node_modules/axios/')) {
+            return 'axios'
+          }
+          // ECharts 单独分包
+          if (id.includes('node_modules/echarts/') ||
+              id.includes('node_modules/vue-echarts/')) {
+            return 'echarts'
+          }
         },
         chunkFileNames: 'assets/js/[name]-[hash].js',
         entryFileNames: 'assets/js/[name]-[hash].js',
         assetFileNames: 'assets/[ext]/[name]-[hash].[ext]',
       },
     },
-    // Warn when chunk is larger than 500KB
-    chunkSizeWarningLimit: 500,
+    chunkSizeWarningLimit: 600,
   },
-  // Optimization
   optimizeDeps: {
     include: ['vue', 'vue-router', 'pinia', 'axios'],
   },
