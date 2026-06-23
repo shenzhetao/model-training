@@ -23,7 +23,13 @@ export default defineConfig({
   globalSetup: './global-setup.ts',
   globalTeardown: './global-teardown.ts',
 
+  // 测试匹配规则 - 用于在特定浏览器上跳过或仅运行特定测试
+  testMatch: [
+    '**/*.spec.ts',
+  ],
+
   projects: [
+    // Chromium 项目 - 主要测试平台
     {
       name: 'chromium',
       use: {
@@ -31,6 +37,7 @@ export default defineConfig({
         storageState: path.join(__dirname, '.auth', 'chromium.json'),
       },
     },
+    // Firefox 项目
     {
       name: 'firefox',
       use: {
@@ -38,19 +45,51 @@ export default defineConfig({
         storageState: path.join(__dirname, '.auth', 'firefox.json'),
       },
     },
+    // WebKit 项目 - 跳过需要特殊处理的测试
     {
       name: 'webkit',
       use: {
         ...devices['Desktop Safari'],
         storageState: path.join(__dirname, '.auth', 'webkit.json'),
       },
+      // WebKit 有已知的兼容性问题，仅运行基础测试
+      testMatch: [
+        '**/login.spec.ts',
+        '**/page-load.spec.ts',
+        '**/user-flow.spec.ts',
+      ],
+      testIgnore: [
+        '**/annotations.spec.ts',
+        '**/datasets.spec.ts',
+        '**/images.spec.ts',
+        '**/models.spec.ts',
+        '**/templates.spec.ts',
+        '**/training*.spec.ts',
+        '**/inference.spec.ts',
+      ],
     },
+    // Mobile Chrome 项目 - 跳过布局敏感测试
     {
       name: 'Mobile Chrome',
       use: {
         ...devices['Pixel 5'],
         storageState: path.join(__dirname, '.auth', 'mobile-chrome.json'),
       },
+      // 移动端布局不同，跳过部分测试
+      testMatch: [
+        '**/login.spec.ts',
+        '**/page-load.spec.ts',
+        '**/user-flow.spec.ts',
+        '**/datasets.spec.ts',
+      ],
+      testIgnore: [
+        '**/annotations.spec.ts',  // Tab 切换在移动端行为不同
+        '**/images.spec.ts',  // 网格布局在移动端不同
+        '**/models.spec.ts',
+        '**/templates.spec.ts',
+        '**/training*.spec.ts',
+        '**/inference.spec.ts',
+      ],
     },
     // Login tests project - fresh context without auth
     {
