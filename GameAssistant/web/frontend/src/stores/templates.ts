@@ -70,6 +70,8 @@ export const useTemplatesStore = defineStore('templates', () => {
     image_url?: string
     template_ids?: string[]
     threshold?: number
+    multi_match?: boolean
+    method?: string
   }) {
     testLoading.value = true
     try {

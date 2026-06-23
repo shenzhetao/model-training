@@ -19,7 +19,7 @@ export const useAuthStore = defineStore('auth', () => {
   const isAdmin = computed(() => user.value?.role === 'admin')
   const username = computed(() => user.value?.username || '')
 
-  function setAuth(newToken: string, newUser: User) {
+  function setAuth(newToken: string, newUser: User | null) {
     token.value = newToken
     user.value = newUser
     localStorage.setItem(TOKEN_KEY, newToken)

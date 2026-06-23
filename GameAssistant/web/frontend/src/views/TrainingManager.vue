@@ -155,19 +155,19 @@
             <a-tab-pane key="loss" tab="Loss">
               <div ref="lossChartRef" class="chart-wrapper">
                 <v-chart v-if="lossOption" class="echarts-chart" :option="lossOption" autoresize />
-                <a-empty v-else description="暂无数据" :image="Empty.PRESENTED_IMAGE_SIMPLE" />
+                <a-empty v-else description="暂无数据" :image="SimpleEmpty" />
               </div>
             </a-tab-pane>
             <a-tab-pane key="map" tab="mAP">
               <div ref="mapChartRef" class="chart-wrapper">
                 <v-chart v-if="mapOption" class="echarts-chart" :option="mapOption" autoresize />
-                <a-empty v-else description="暂无数据" :image="Empty.PRESENTED_IMAGE_SIMPLE" />
+                <a-empty v-else description="暂无数据" :image="SimpleEmpty" />
               </div>
             </a-tab-pane>
             <a-tab-pane key="precision" tab="Precision/Recall">
               <div class="chart-wrapper">
                 <v-chart v-if="prOption" class="echarts-chart" :option="prOption" autoresize />
-                <a-empty v-else description="暂无数据" :image="Empty.PRESENTED_IMAGE_SIMPLE" />
+                <a-empty v-else description="暂无数据" :image="SimpleEmpty" />
               </div>
             </a-tab-pane>
             <a-tab-pane key="log" tab="原始日志">
@@ -283,13 +283,13 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, reactive, onUnmounted, watch } from 'vue'
-import { message } from 'ant-design-vue'
+import { message, Empty } from 'ant-design-vue'
 import { ReloadOutlined, PlusOutlined, StarOutlined, DownloadOutlined } from '@ant-design/icons-vue'
 import { useTrainingStore } from '@/stores/training'
-import trainingApi from '@/api/training'
 import type { TrainingJob } from '@/api/training'
 
 const store = useTrainingStore()
+const SimpleEmpty = Empty.PRESENTED_IMAGE_SIMPLE
 const jobs = computed(() => store.jobs)
 const loading = computed(() => store.loading)
 const starting = computed(() => store.starting)
@@ -470,7 +470,7 @@ async function handleCreateJob() {
   if (!jobForm.name.trim()) { message.error('请填写任务名称'); return }
   if (!jobForm.dataset_version_id) { message.error('请选择数据集版本'); return }
   try {
-    const job = await store.createJob(jobForm)
+    await store.createJob(jobForm)
     message.success('训练任务已创建，稍后自动开始')
     showCreateJob.value = false
     jobForm.name = ''

@@ -7,13 +7,19 @@ import numpy as np
 
 from app.config import settings
 
-# 动态添加 GameAssistant pc/core 到 sys.path
+# 动态添加 GameAssistant pc/core 到 sys.path（如果存在）
 _PC_CORE = Path(__file__).resolve().parents[3] / "pc" / "core"
-if str(_PC_CORE) not in sys.path:
+if _PC_CORE.exists() and str(_PC_CORE) not in sys.path:
     sys.path.insert(0, str(_PC_CORE))
 
-from template_matcher import TemplateMatcher, Detection as TMD
-from element_detector import ElementDetector
+try:
+    from template_matcher import TemplateMatcher, Detection as TMD
+    from element_detector import ElementDetector
+    _HAS_DETECTOR = True
+except ImportError:
+    TMD = None  # type: ignore
+    ElementDetector = None  # type: ignore
+    _HAS_DETECTOR = False
 
 
 class DetectionResult:
@@ -66,13 +72,19 @@ class DetectorWrapper:
             or str(Path(__file__).resolve().parents[3] / "config" / "game.yaml")
         )
 
-        # Lazy-load device profile
-        sys.path.insert(0, str(_PC_CORE))
-        from device_profile import DeviceProfile
-
-        device = DeviceProfile(device_id=device_id) if device_id else None
+        if not _HAS_DETECTOR:
+            self.detector = None
+            self._ready = False
+            self._init_error = "template_matcher / element_detector 模块不可用"
+            return
 
         try:
+            if _PC_CORE.exists() and str(_PC_CORE) not in sys.path:
+                sys.path.insert(0, str(_PC_CORE))
+            from device_profile import DeviceProfile
+
+            device = DeviceProfile(device_id=device_id) if device_id else None
+
             self.detector = ElementDetector(
                 template_dir=Path(self.template_dir),
                 yolo_model_path=Path(self.yolo_model_path) if self.yolo_model_path else None,
@@ -85,6 +97,10 @@ class DetectorWrapper:
             self.detector = None
             self._ready = False
             self._init_error = str(e)
+        except Exception as e:
+            self.detector = None
+            self._ready = False
+            self._init_error = str(e)
 
     @property
     def is_ready(self) -> bool:
@@ -94,7 +110,7 @@ class DetectorWrapper:
         """对一张截图执行混合检测。"""
         if not self._ready:
             raise RuntimeError(f"Detector 未就绪: {getattr(self, '_init_error', 'unknown')}")
-        raw_results: list[TMD] = self.detector.detect(screen)
+        raw_results: list = self.detector.detect(screen)
         return [
             DetectionResult(
                 cls=d.cls,
@@ -123,6 +139,8 @@ class DetectorWrapper:
     def draw(self, screen: np.ndarray, detections: list[DetectionResult]) -> np.ndarray:
         """在截图上绘制检测框（调试用）。"""
         if not self._ready:
+            return screen
+        if TMD is None:
             return screen
         raw = [TMD(
             cls=d.cls, x=d.x, y=d.y, w=d.w, h=d.h,

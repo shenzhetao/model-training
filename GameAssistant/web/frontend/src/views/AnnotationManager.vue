@@ -33,7 +33,7 @@
         <a-statistic title="自动标注" :value="stats?.auto_annotations || 0" />
       </a-col>
       <a-col :span="6">
-        <a-statistic title="已完成项目" :value="stats?.completed || 0" />
+        <a-statistic title="已完成项目数" :value="stats?.completed || 0" />
       </a-col>
     </a-row>
 
@@ -72,9 +72,7 @@
             </template>
             <template v-else-if="column.key === 'progress'">
               <a-progress
-                :percent="record.total_images > 0
-                  ? Math.round((record.annotated_images / record.total_images) * 100)
-                  : 0"
+                :percent="calcProgress(record.annotated_images, record.total_images)"
                 size="small"
               />
               <span class="progress-text">
@@ -207,7 +205,8 @@
               </div>
 
               <!-- Annotation List -->
-              <a-divider>已标注 ({{ annotations.length }})</a-divider>
+              <div class="annotation-list-label">已标注 ({{ annotations.length }})</div>
+              <a-divider style="margin: 8px 0" />
               <div class="annotation-list-container" ref="annotationListRef" @scroll="onAnnotationScroll">
                 <div
                   v-if="annotations.length > 0"
@@ -292,7 +291,7 @@
                     <a-select-option value="in_review">待审核</a-select-option>
                     <a-select-option value="rejected">已退回</a-select-option>
                   </a-select>
-                  <a-button size="small" @click="loadReviewQueue"><ReloadOutlined />刷新</ReloadOutlined></a-button>
+                  <a-button size="small" @click="loadReviewQueue"><ReloadOutlined />刷新</a-button>
                 </a-space>
               </template>
 
@@ -342,18 +341,20 @@
               <a-descriptions :column="2" size="small" bordered style="margin-bottom:16px">
                 <a-descriptions-item label="进度">
                   {{ selectedReview.annotated_images }} / {{ selectedReview.total_images }} 张
-                  <a-progress :percent="selectedReview.total_images > 0 ? Math.round(selectedReview.annotated_images / selectedReview.total_images * 100) : 0" size="small" style="margin-top:4px" />
+                  <a-progress :percent="calcProgress(selectedReview.annotated_images, selectedReview.total_images)" size="small" style="margin-top:4px" />
                 </a-descriptions-item>
                 <a-descriptions-item label="已审核">{{ selectedReview.reviewed_images }} 张</a-descriptions-item>
                 <a-descriptions-item label="创建时间">{{ new Date(selectedReview.created_at).toLocaleString('zh-CN') }}</a-descriptions-item>
                 <a-descriptions-item label="描述">{{ selectedReview.description || '-' }}</a-descriptions-item>
               </a-descriptions>
 
-              <a-divider>退回反馈</a-divider>
+              <div class="section-label">退回反馈</div>
+              <a-divider style="margin: 8px 0" />
               <p v-if="selectedReview.review_feedback" style="color:#f5222d;font-size:13px">{{ selectedReview.review_feedback }}</p>
               <a-empty v-else description="暂无反馈" :image="Empty.PRESENTED_IMAGE_SIMPLE" />
 
-              <a-divider>审核操作</a-divider>
+              <div class="section-label">审核操作</div>
+              <a-divider style="margin: 8px 0" />
               <a-space direction="vertical" style="width:100%">
                 <a-button type="primary" block @click="handleApproveProject(selectedReview)" :loading="reviewActionLoading">
                   <template #icon><CheckOutlined /></template>通过审核
@@ -475,6 +476,13 @@ const projectStatusColor = computed(() => {
   return 'default'
 })
 
+function calcProgress(annotated: number, total: number): number {
+  if (total > 0) {
+    return Math.round((annotated / total) * 100)
+  }
+  return 0
+}
+
 async function loadStats() {
   await annStore.fetchStats()
 }
@@ -580,7 +588,7 @@ async function deleteProject(project: AnnotationProject) {
   })
 }
 
-function openProject(project: AnnotationProject) {
+function openProject(_project: AnnotationProject) {
   activeTab.value = 'annotate'
 }
 
@@ -602,8 +610,6 @@ let isDrawing = false
 let drawStartX = 0
 let drawStartY = 0
 let scale = 1
-let offsetX = 0
-let offsetY = 0
 
 const scrollTop = ref(0)
 const viewHeight = ref(300)
@@ -622,13 +628,6 @@ function onAnnotationScroll(e: Event) {
   const el = e.target as HTMLElement
   scrollTop.value = el.scrollTop
 }
-
-const annotationColumns = [
-  { title: '类别', key: 'cls', width: 120 },
-  { title: '坐标', key: 'bbox', width: 200 },
-  { title: '置信度', key: 'conf', width: 80 },
-  { title: '操作', key: 'action', width: 80 },
-]
 
 async function loadAnnotateImages() {
   try {
@@ -1163,3 +1162,19 @@ onUnmounted(() => {
   .annotation-manager { padding: 12px; }
   .page-header { flex-direction: column; align-items: flex-start; gap: 12px; }
 }
+
+/* Section labels for dividers */
+.section-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: rgba(0, 0, 0, 0.85);
+  margin-bottom: 4px;
+}
+
+.annotation-list-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: rgba(0, 0, 0, 0.85);
+  margin-bottom: 4px;
+}
+</style>

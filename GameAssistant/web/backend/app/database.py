@@ -8,7 +8,7 @@ engine = create_async_engine(
     echo=settings.DEBUG,
     pool_size=settings.DB_POOL_SIZE,
     max_overflow=settings.DB_MAX_OVERFLOW,
-    pool_pre_ping=True,
+    pool_pre_ping=False,
 )
 
 # Create async session factory

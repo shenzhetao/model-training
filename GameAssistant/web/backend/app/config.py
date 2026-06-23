@@ -27,9 +27,6 @@ class Settings(BaseSettings):
     MODEL_DIR: str = "/app/models"
     MAX_UPLOAD_SIZE: int = 2 * 1024 * 1024 * 1024  # 2GB
 
-    # CORS
-    CORS_ORIGINS: list = ["http://localhost:3000", "http://localhost:8080"]
-
     # ADB
     ADB_HOST: str = "localhost"
     ADB_PORT: int = 5037
@@ -37,6 +34,14 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = True
+
+    @property
+    def CORS_ORIGINS(self) -> list[str]:
+        """Parse CORS_ORIGINS from environment, supporting comma-separated string."""
+        raw = os.environ.get("CORS_ORIGINS", "")
+        if raw:
+            return [v.strip() for v in raw.split(",") if v.strip()]
+        return ["http://localhost:3000", "http://localhost:8080"]
 
 
 settings = Settings()

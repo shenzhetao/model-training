@@ -218,12 +218,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, reactive, nextTick } from 'vue'
-import { message, Modal } from 'ant-design-vue'
-import { Empty } from 'ant-design-vue'
-import { ReloadOutlined, UploadOutlined, PlusOutlined, DownloadOutlined, HistoryOutlined } from '@ant-design/icons-vue'
+import { ref, computed, onMounted, reactive } from 'vue'
+import { message, Modal, Empty } from 'ant-design-vue'
+import { ReloadOutlined, UploadOutlined, DownloadOutlined, HistoryOutlined } from '@ant-design/icons-vue'
 import { useModelsStore } from '@/stores/models'
-import modelsApi from '@/api/models'
 import trainingApi from '@/api/training'
 import type { TrainedModel } from '@/api/models'
 
@@ -239,9 +237,6 @@ const activating = ref<string | null>(null)
 const showUpload = ref(false)
 const showVersionHistoryModal = ref(false)
 const modelHistory = ref<any[]>([])
-const addingTag = ref(false)
-const newTag = ref('')
-const tagInputRef = ref<HTMLInputElement | null>(null)
 const evalChartOption = ref<any>(null)
 
 const columns = [
@@ -375,26 +370,6 @@ async function handleUpload() {
     uploadForm.description = ''
     await loadData()
   } catch { message.error('上传失败') }
-}
-
-function startAddTag() {
-  addingTag.value = true
-  nextTick(() => tagInputRef.value?.focus())
-}
-
-async function addTag(m: TrainedModel) {
-  if (!newTag.value.trim()) return
-  const tags = [...(m.tags || []), newTag.value.trim()]
-  await store.modelsApi.update(m.id, { tags })
-  m.tags = tags
-  newTag.value = ''
-  addingTag.value = false
-}
-
-async function removeTag(m: TrainedModel, tag: string) {
-  const tags = (m.tags || []).filter(t => t !== tag)
-  await store.modelsApi.update(m.id, { tags })
-  m.tags = tags
 }
 
 onMounted(() => { loadData() })

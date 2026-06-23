@@ -123,9 +123,9 @@
                   </a-space>
                 </template>
               </template>
-            </a-table>
+              </a-table>
+              <a-empty v-else description="暂无版本，点击上方创建第一个版本" />
             </div>
-            <a-empty v-else description="暂无版本，点击上方创建第一个版本" />
           </a-card>
         </template>
       </a-col>
@@ -344,10 +344,9 @@
 
 <script setup lang="ts">
 import { ref, computed, reactive, onMounted } from 'vue'
-import { message, Modal } from 'ant-design-vue'
+import { message, Modal, Empty } from 'ant-design-vue'
 import { PlusOutlined, ReloadOutlined, DeleteOutlined, SettingOutlined, InsertRowRightOutlined } from '@ant-design/icons-vue'
 import { useDatasetsStore } from '@/stores/datasets'
-import datasetsApi from '@/api/datasets'
 import imagesApi from '@/api/images'
 import annotationsApi from '@/api/annotations'
 import type { Dataset, DatasetVersion } from '@/api/datasets'
@@ -357,7 +356,6 @@ import type { AnnotationClass } from '@/api/annotations'
 const dsStore = useDatasetsStore()
 const datasets = computed(() => dsStore.datasets)
 const versions = computed(() => dsStore.versions)
-const loading = computed(() => dsStore.loading)
 const generating = computed(() => dsStore.generating)
 
 const selectedDatasetId = ref<string | null>(null)

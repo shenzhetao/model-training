@@ -8,10 +8,16 @@ import numpy as np
 from app.config import settings
 
 _PC_CORE = Path(__file__).resolve().parents[3] / "pc" / "core"
-if str(_PC_CORE) not in sys.path:
+if _PC_CORE.exists() and str(_PC_CORE) not in sys.path:
     sys.path.insert(0, str(_PC_CORE))
 
-from template_matcher import TemplateMatcher, Detection as TMD
+try:
+    from template_matcher import TemplateMatcher, Detection as TMD
+    _HAS_TEMPLATE_MATCHER = True
+except ImportError:
+    TemplateMatcher = None  # type: ignore
+    TMD = None  # type: ignore
+    _HAS_TEMPLATE_MATCHER = False
 
 
 class DetectionResult:
@@ -61,12 +67,19 @@ class TemplateWrapper:
             or str(Path(__file__).resolve().parents[3] / "config" / "game.yaml")
         )
 
-        sys.path.insert(0, str(_PC_CORE))
-        from device_profile import DeviceProfile
+        if not _HAS_TEMPLATE_MATCHER:
+            self.matcher = None
+            self._ready = False
+            self._init_error = "template_matcher 模块不可用"
+            return
 
-        device = DeviceProfile(device_id=device_id) if device_id else None
+        if _PC_CORE.exists() and str(_PC_CORE) not in sys.path:
+            sys.path.insert(0, str(_PC_CORE))
 
         try:
+            from device_profile import DeviceProfile
+            device = DeviceProfile(device_id=device_id) if device_id else None
+
             self.matcher = TemplateMatcher(
                 template_root=Path(self.template_dir),
                 device=device,
@@ -75,6 +88,10 @@ class TemplateWrapper:
             )
             self._ready = True
         except FileNotFoundError as e:
+            self.matcher = None
+            self._ready = False
+            self._init_error = str(e)
+        except Exception as e:
             self.matcher = None
             self._ready = False
             self._init_error = str(e)
@@ -87,7 +104,7 @@ class TemplateWrapper:
         """匹配指定类别。"""
         if not self._ready:
             raise RuntimeError(f"TemplateWrapper 未就绪: {getattr(self, '_init_error', 'unknown')}")
-        raw: list[TMD] = self.matcher.match(screen, cls_name)
+        raw: list = self.matcher.match(screen, cls_name)
         return [
             DetectionResult(
                 cls=d.cls, x=d.x, y=d.y, w=d.w, h=d.h,
@@ -100,7 +117,7 @@ class TemplateWrapper:
         """匹配指定类别，返回置信度最高的那个。"""
         if not self._ready:
             return None
-        raw: Optional[TMD] = self.matcher.match_one(screen, cls_name)
+        raw: Optional = self.matcher.match_one(screen, cls_name)
         if raw is None:
             return None
         return DetectionResult(
@@ -112,7 +129,7 @@ class TemplateWrapper:
         """匹配所有已注册类别。"""
         if not self._ready:
             raise RuntimeError(f"TemplateWrapper 未就绪: {getattr(self, '_init_error', 'unknown')}")
-        raw: list[TMD] = self.matcher.match_all(screen)
+        raw: list = self.matcher.match_all(screen)
         return [
             DetectionResult(
                 cls=d.cls, x=d.x, y=d.y, w=d.w, h=d.h,

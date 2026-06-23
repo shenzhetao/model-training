@@ -150,7 +150,7 @@
             </a-card>
             <a-card title="推理结果" style="margin-top:16px">
               <a-list v-if="videoResults.length > 0" size="small" bordered :data-source="videoResults">
-                <template #renderItem="{ item, index }">
+                <template #renderItem="{ item }">
                   <a-list-item>
                     <a-list-item-meta :title="`帧 ${item.frame}`" :description="`检测 ${item.detections} 个 / ${item.time_ms}ms`" />
                   </a-list-item>
@@ -297,7 +297,7 @@ import { message } from 'ant-design-vue'
 import { Empty } from 'ant-design-vue'
 import {
   SyncOutlined, ReloadOutlined, FieldTimeOutlined, MobileOutlined,
-  ThunderboltOutlined, CameraOutlined, DownloadOutlined, UploadOutlined, PlusOutlined,
+  ThunderboltOutlined, CameraOutlined, DownloadOutlined, UploadOutlined,
 } from '@ant-design/icons-vue'
 import { useADBDeviceStore } from '@/stores/adb'
 import { useInferenceStore } from '@/stores/inference'
@@ -430,7 +430,7 @@ async function startVideoInference() {
     videoInferring.value = false
     message.success('视频推理完成')
     infStore.recordResult({
-      name: videoFile.value.name,
+      name: videoFile.value!.name,
       source_type: 'video',
       inference_mode: 'hybrid',
       confidence_threshold: yoloConf.value,

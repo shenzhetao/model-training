@@ -44,7 +44,7 @@ export const useADBDeviceStore = defineStore('adb', () => {
       const resp = await adbApi.listDevices()
       devices.value = resp.devices.filter(d => d.state === 'device')
       if (devices.value.length === 0) {
-        screenshotError.value = resp.message || '未检测到已连接的设备'
+        screenshotError.value = '未检测到已连接的设备'
       }
     } catch {
       screenshotError.value = '获取设备列表失败'
