@@ -7,7 +7,7 @@ test.describe('图片管理', () => {
   })
 
   test('页面加载正常，显示图片管理标题', async ({ page }) => {
-    await expect(page.getByRole('heading', { name: /图片管理/i })).toBeVisible()
+    await expect(page.locator('h2').filter({ hasText: /图片管理/i })).toBeVisible()
   })
 
   test('图片计数显示正常', async ({ page }) => {
