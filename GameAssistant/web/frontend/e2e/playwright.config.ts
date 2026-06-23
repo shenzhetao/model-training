@@ -48,6 +48,14 @@ export default defineConfig({
         storageState: path.join(__dirname, '.auth', 'mobile-chrome.json'),
       },
     },
+    // Login tests project - fresh context without auth
+    {
+      name: 'chromium-fresh',
+      use: {
+        ...devices['Desktop Chrome'],
+        // No storageState - fresh context for login tests
+      },
+    },
   ],
 
   webServer: process.env.CI

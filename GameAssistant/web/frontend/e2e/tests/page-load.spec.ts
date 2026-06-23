@@ -1,10 +1,16 @@
 import { test, expect } from '@playwright/test'
 
 test.describe('页面加载验证', () => {
-  test('登录页面能正常加载且无控制台错误', async ({ page }) => {
+  test('登录页面能正常加载且无控制台错误', async ({ page, browser }) => {
+    // 创建一个干净的 context，确保没有 auth state
+    const context = await browser.newContext({
+      storageState: undefined
+    })
+    const cleanPage = await context.newPage()
+
     // 监听控制台错误
     const consoleErrors: string[] = []
-    page.on('console', (msg) => {
+    cleanPage.on('console', (msg) => {
       if (msg.type() === 'error') {
         const text = msg.text()
         // 忽略 API 相关的错误（测试环境 CORS 问题）
@@ -14,26 +20,22 @@ test.describe('页面加载验证', () => {
       }
     })
 
-    // 访问登录页（如果已有 auth state，会自动重定向到 /images）
-    await page.goto('/login')
-    await page.waitForLoadState('networkidle')
-    await page.waitForTimeout(2000)
+    // 访问登录页
+    await cleanPage.goto('/login')
+    await cleanPage.waitForLoadState('networkidle')
+    await cleanPage.waitForTimeout(2000)
 
     // 验证页面标题
-    await expect(page).toHaveTitle(/GameAssistant/)
+    await expect(cleanPage).toHaveTitle(/GameAssistant/)
 
-    // 页面应该正常加载（登录表单或已登录状态）
-    // 两种可能：登录页表单 或 已登录后的图片管理页
-    const hasLoginForm = await page.locator('input[placeholder="用户名"]').isVisible().catch(() => false)
-    const hasMainMenu = await page.locator('.main-menu').isVisible().catch(() => false)
-    
-    // 至少显示其中一种状态
-    expect(hasLoginForm || hasMainMenu).toBeTruthy()
+    // 验证登录表单存在（在没有 auth state 的情况下）
+    const hasLoginForm = await cleanPage.locator('input[placeholder="用户名"]').isVisible().catch(() => false)
+    expect(hasLoginForm).toBeTruthy()
 
-    // 如果已登录，验证主菜单
-    if (hasMainMenu) {
-      await expect(page.locator('.main-menu')).toBeVisible()
-    }
+    // 验证表单元素
+    await expect(cleanPage.locator('input[placeholder="用户名"]')).toBeVisible()
+    await expect(cleanPage.locator('input[placeholder="密码"]')).toBeVisible()
+    await expect(cleanPage.locator('button[type="submit"]')).toBeVisible()
 
     // 验证无关键控制台错误
     const criticalErrors = consoleErrors.filter(
@@ -44,6 +46,8 @@ test.describe('页面加载验证', () => {
     )
 
     expect(criticalErrors).toHaveLength(0)
+
+    await context.close()
   })
 
   test('已登录状态访问关键页面正常', async ({ page }) => {
