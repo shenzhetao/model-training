@@ -45,6 +45,16 @@
         @click="handleMenuClick"
         class="main-menu hide-mobile"
       />
+      <!-- Admin-only menu -->
+      <a-menu
+        v-if="isAdmin"
+        v-model:selectedKeys="currentMenu"
+        theme="dark"
+        mode="horizontal"
+        :items="adminMenuItems"
+        @click="handleMenuClick"
+        class="admin-menu hide-mobile"
+      />
 
       <div class="header-right">
         <a-tooltip title="刷新">
@@ -109,6 +119,13 @@ const menuItems: MenuProps['items'] = [
   { key: '/training', label: '训练管理' },
   { key: '/inference', label: '推理测试' },
 ]
+
+// Admin-only menu items
+const adminMenuItems: MenuProps['items'] = [
+  { key: '/users', label: '用户管理' },
+]
+
+const isAdmin = computed(() => authStore.isAdmin)
 
 const currentMenu = ref<string[]>([route.path])
 

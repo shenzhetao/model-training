@@ -63,6 +63,7 @@ import { useAuthStore } from '@/stores/auth'
 import { message } from 'ant-design-vue'
 import { UserOutlined, LockOutlined } from '@ant-design/icons-vue'
 import request from '@/api/request'
+import { usersApi } from '@/api/users'
 
 const router = useRouter()
 const route = useRoute()
@@ -78,8 +79,10 @@ const formState = reactive({
 async function handleLogin() {
   loading.value = true
   try {
-    const response = await request.post<{ access_token: string; token_type: string }>('/users/login/json', formState)
-    authStore.setAuth(response.access_token, null)
+    const response = await usersApi.login(formState)
+    // Fetch current user info after login
+    const userInfo = await usersApi.getCurrentUser()
+    authStore.setAuth(response.access_token, userInfo)
     const redirect = route.query.redirect as string || '/images'
     router.push(redirect)
     message.success('登录成功')

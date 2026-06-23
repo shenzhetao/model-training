@@ -1,7 +1,5 @@
 import { test, expect } from '@playwright/test'
 
-test.use({ storageState: './playwright/.auth/user.json' })
-
 test.describe('训练管理', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/training')

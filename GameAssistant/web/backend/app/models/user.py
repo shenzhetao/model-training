@@ -15,6 +15,7 @@ class User(Base):
     created_at = Column(DateTime, nullable=False, server_default=func.now())
     updated_at = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
     is_active = Column(Boolean, nullable=False, default=True)
+    is_password_changed = Column(Boolean, nullable=False, default=False)  # Force password change on first login
 
     __table_args__ = (
         Index("idx_users_role", "role"),

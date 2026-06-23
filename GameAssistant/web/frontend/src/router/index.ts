@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
+import { message } from 'ant-design-vue'
 import { useAuthStore } from '@/stores/auth'
 
 const routes: RouteRecordRaw[] = [
@@ -59,6 +60,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/InferencePlayground.vue'),
         meta: { title: '推理测试' },
       },
+      {
+        path: 'users',
+        name: 'UserManagement',
+        component: () => import('@/views/UserManagement.vue'),
+        meta: { title: '用户管理', requiresAdmin: true },
+      },
     ],
   },
 ]
@@ -76,7 +83,13 @@ router.beforeEach((to, _from, next) => {
     next({ name: 'Login', query: { redirect: to.fullPath } })
   } else if (to.name === 'Login' && authStore.isAuthenticated) {
     next({ name: 'ImageManager' })
-  } else {
+  }
+  // Admin-only routes check
+  else if (to.meta.requiresAdmin && !authStore.isAdmin) {
+    message.error('需要管理员权限')
+    next({ name: 'ImageManager' })
+  }
+  else {
     next()
   }
 })

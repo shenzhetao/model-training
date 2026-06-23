@@ -31,6 +31,7 @@ class UserUpdate(BaseModel):
     email: Optional[str] = None
     role: Optional[str] = None
     is_active: Optional[bool] = None
+    password: Optional[str] = None  # Admin can reset password
 
 
 class UserResponse(UserBase):
@@ -40,8 +41,15 @@ class UserResponse(UserBase):
     id: str
     role: str
     is_active: bool
+    is_password_changed: bool = False  # Whether user has changed password
     created_at: datetime
     updated_at: datetime
+
+
+class UserCreateByAdmin(UserBase):
+    """Schema for admin to create a new user."""
+    password: str = Field(default="Changeme123", min_length=6)
+    role: str = Field(default="annotator")
 
 
 class LoginRequest(BaseModel):
