@@ -2,6 +2,15 @@ import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { useAuthStore } from '@/stores/auth'
 
+// Import async components for non-primary views
+import { AnnotationManagerAsync } from '@/views/async/AnnotationManagerAsync'
+import { TemplateManagerAsync } from '@/views/async/TemplateManagerAsync'
+import { DatasetManagerAsync } from '@/views/async/DatasetManagerAsync'
+import { ModelManagerAsync } from '@/views/async/ModelManagerAsync'
+import { TrainingManagerAsync } from '@/views/async/TrainingManagerAsync'
+import { InferencePlaygroundAsync } from '@/views/async/InferencePlaygroundAsync'
+import { UserManagementAsync } from '@/views/async/UserManagementAsync'
+
 const routes: RouteRecordRaw[] = [
   {
     path: '/login',
@@ -27,43 +36,43 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'annotations',
         name: 'AnnotationManager',
-        component: () => import('@/views/AnnotationManager.vue'),
+        component: AnnotationManagerAsync,
         meta: { title: '标注管理' },
       },
       {
         path: 'templates',
         name: 'TemplateManager',
-        component: () => import('@/views/TemplateManager.vue'),
+        component: TemplateManagerAsync,
         meta: { title: '模板管理' },
       },
       {
         path: 'datasets',
         name: 'DatasetManager',
-        component: () => import('@/views/DatasetManager.vue'),
+        component: DatasetManagerAsync,
         meta: { title: '数据集管理' },
       },
       {
         path: 'models',
         name: 'ModelManager',
-        component: () => import('@/views/ModelManager.vue'),
+        component: ModelManagerAsync,
         meta: { title: '模型管理' },
       },
       {
         path: 'training',
         name: 'TrainingManager',
-        component: () => import('@/views/TrainingManager.vue'),
+        component: TrainingManagerAsync,
         meta: { title: '训练管理' },
       },
       {
         path: 'inference',
         name: 'InferencePlayground',
-        component: () => import('@/views/InferencePlayground.vue'),
+        component: InferencePlaygroundAsync,
         meta: { title: '推理测试' },
       },
       {
         path: 'users',
         name: 'UserManagement',
-        component: () => import('@/views/UserManagement.vue'),
+        component: UserManagementAsync,
         meta: { title: '用户管理', requiresAdmin: true },
       },
     ],
