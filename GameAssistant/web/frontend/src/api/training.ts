@@ -105,7 +105,7 @@ export const trainingApi = {
   },
 
   getLogsSSE(jobId: string): string {
-    return `/api/v1/training/${jobId}/logs`
+    return `/api/training/${jobId}/logs`
   },
 }
 

@@ -315,7 +315,7 @@ async function showVersionHistory() {
 }
 
 function handleDownload(m: TrainedModel) {
-  window.open(`/api/v1/models/${m.id}/download`, '_blank')
+  window.open(`/api/models/${m.id}/download`, '_blank')
   message.success('开始下载...')
 }
 

@@ -60,7 +60,7 @@ export const adbApi = {
 
   getScreenshotUrl(device_id?: string): string {
     const params = device_id ? `?device_id=${encodeURIComponent(device_id)}` : ''
-    return `/api/v1/adb/screenshot${params}`
+    return `/api/adb/screenshot${params}`
   },
 
   async runInference(params: InferenceParams = {}): Promise<InferenceResponse> {

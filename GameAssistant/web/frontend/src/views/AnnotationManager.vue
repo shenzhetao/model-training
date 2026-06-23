@@ -832,7 +832,7 @@ async function saveAnnotations() {
 }
 
 function exportYOLO() {
-  window.open('/api/v1/annotations/export/yolo', '_blank')
+  window.open('/api/annotations/export/yolo', '_blank')
 }
 
 // ── Classes ────────────────────────────────────────────────

@@ -25,7 +25,7 @@
 
     <a-row :gutter="16">
       <!-- Left: Job List -->
-      <a-col :span="currentJob ? 10 : 24">
+      <a-col :xs="24" :sm="24" :md="currentJob ? 10 : 24">
         <a-card title="训练任务" size="small">
           <template #extra>
             <a-select
@@ -92,7 +92,7 @@
       </a-col>
 
       <!-- Right: Job Detail + Metrics -->
-      <a-col :span="14" v-if="currentJob">
+      <a-col :xs="24" :sm="24" :md="14" v-if="currentJob">
         <a-card size="small" style="margin-bottom: 16px">
           <template #title>
             <div class="job-detail-header">
@@ -194,7 +194,7 @@
         </a-form-item>
 
         <a-row :gutter="12">
-          <a-col :span="12">
+          <a-col :xs="24" :sm="12" :md="8">
             <a-form-item label="数据集版本" required>
               <a-select
                 v-model:value="jobForm.dataset_version_id"
@@ -224,17 +224,17 @@
         <a-divider>训练参数</a-divider>
 
         <a-row :gutter="12">
-          <a-col :span="8">
+          <a-col :xs="24" :sm="12" :md="8">
             <a-form-item label="Epochs">
               <a-input-number v-model:value="jobForm.epochs" :min="1" :max="1000" style="width: 100%" />
             </a-form-item>
           </a-col>
-          <a-col :span="8">
+          <a-col :xs="24" :sm="12" :md="8">
             <a-form-item label="Batch Size">
               <a-input-number v-model:value="jobForm.batch_size" :min="1" :max="256" style="width: 100%" />
             </a-form-item>
           </a-col>
-          <a-col :span="8">
+          <a-col :xs="24" :sm="12" :md="8">
             <a-form-item label="图片尺寸">
               <a-input-number v-model:value="jobForm.img_size" :min="320" :max="1280" :step="32" style="width: 100%" />
             </a-form-item>
@@ -242,17 +242,17 @@
         </a-row>
 
         <a-row :gutter="12">
-          <a-col :span="8">
+          <a-col :xs="24" :sm="12" :md="8">
             <a-form-item label="初始学习率">
               <a-input-number v-model:value="jobForm.lr0" :min="0" :max="1" :step="0.001" style="width: 100%" />
             </a-form-item>
           </a-col>
-          <a-col :span="8">
+          <a-col :xs="24" :sm="12" :md="8">
             <a-form-item label="最终学习率">
               <a-input-number v-model:value="jobForm.lrf" :min="0" :max="1" :step="0.001" style="width: 100%" />
             </a-form-item>
           </a-col>
-          <a-col :span="8">
+          <a-col :xs="24" :sm="12" :md="8">
             <a-form-item label="Early Stop">
               <a-input-number v-model:value="jobForm.patience" :min="5" :max="200" style="width: 100%" />
             </a-form-item>
@@ -260,17 +260,17 @@
         </a-row>
 
         <a-row :gutter="12">
-          <a-col :span="8">
+          <a-col :xs="24" :sm="12" :md="8">
             <a-form-item label="Mosaic">
               <a-slider v-model:value="jobForm.mosaic" :min="0" :max="1" :step="0.1" />
             </a-form-item>
           </a-col>
-          <a-col :span="8">
+          <a-col :xs="24" :sm="12" :md="8">
             <a-form-item label="MixUp">
               <a-slider v-model:value="jobForm.mixup" :min="0" :max="1" :step="0.1" />
             </a-form-item>
           </a-col>
-          <a-col :span="8">
+          <a-col :xs="24" :sm="12" :md="8">
             <a-form-item label="水平翻转">
               <a-slider v-model:value="jobForm.flip_lr" :min="0" :max="1" :step="0.1" />
             </a-form-item>
@@ -524,5 +524,18 @@ onUnmounted(() => {
 .echarts-chart {
   width: 100%;
   height: 220px;
+}
+
+@media (max-width: 768px) {
+  .training-manager { padding: 12px; }
+  .page-header { flex-direction: column; align-items: flex-start; gap: 12px; }
+  .header-left { flex-wrap: wrap; }
+  .log-container { max-height: 240px; }
+}
+
+@media (max-width: 576px) {
+  .log-container { max-height: 180px; }
+  .chart-wrapper { min-height: 160px; }
+  .echarts-chart { height: 160px; }
 }
 </style>

@@ -96,7 +96,7 @@ export const templatesApi = {
   },
 
   getServeUrl(id: string): string {
-    return `/api/v1/templates/${id}/serve`
+    return `/api/templates/${id}/serve`
   },
 
   async testMatching(params: {

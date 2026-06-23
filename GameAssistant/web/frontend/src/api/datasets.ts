@@ -95,7 +95,7 @@ export const datasetsApi = {
   },
 
   getGenerateYoloUrl(datasetId: string, versionId: string): string {
-    return `/api/v1/datasets/${datasetId}/versions/${versionId}/generate-yolo`
+    return `/api/datasets/${datasetId}/versions/${versionId}/generate-yolo`
   },
 }
 

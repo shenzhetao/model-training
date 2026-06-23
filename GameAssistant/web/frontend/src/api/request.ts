@@ -7,7 +7,7 @@ export interface RequestConfig extends AxiosRequestConfig {
 }
 
 const api = axios.create({
-  baseURL: '/api/v1',
+  baseURL: '/api',
   timeout: 300000, // 5 minutes for large file uploads
   headers: {
     'Content-Type': 'application/json',
