@@ -1,9 +1,25 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { resolve } from 'path'
+import Components from 'unplugin-vue-components/vite'
+import AutoImport from 'unplugin-auto-import/vite'
+import { AntDesignVueResolver } from 'unplugin-vue-components/resolvers'
 
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [
+    vue(),
+    Components({
+      resolvers: [
+        AntDesignVueResolver({
+          importStyle: false,
+        }),
+      ],
+    }),
+    AutoImport({
+      imports: ['vue', 'vue-router', 'pinia'],
+      dts: 'src/auto-imports.d.ts',
+    }),
+  ],
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src'),
@@ -27,12 +43,8 @@ export default defineConfig({
         manualChunks: {
           // Vue core
           'vue-vendor': ['vue', 'vue-router', 'pinia'],
-          // Ant Design Vue - separate chunk for UI library
-          'ant-design': ['ant-design-vue'],
           // ECharts - separate chunk for charting library (largest dependency)
           'echarts': ['echarts', 'vue-echarts'],
-          // VueUse utilities
-          'vueuse': ['@vueuse/core'],
           // Axios
           'axios': ['axios'],
         },
@@ -46,6 +58,6 @@ export default defineConfig({
   },
   // Optimization
   optimizeDeps: {
-    include: ['vue', 'vue-router', 'pinia', 'ant-design-vue', 'axios'],
+    include: ['vue', 'vue-router', 'pinia', 'axios'],
   },
 })
