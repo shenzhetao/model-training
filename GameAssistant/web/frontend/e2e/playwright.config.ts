@@ -45,18 +45,18 @@ export default defineConfig({
         storageState: path.join(__dirname, '.auth', 'firefox.json'),
       },
     },
-    // WebKit 项目 - 跳过需要特殊处理的测试
+    // WebKit 项目 - 使用 WebKit 兼容测试
     {
       name: 'webkit',
       use: {
         ...devices['Desktop Safari'],
         storageState: path.join(__dirname, '.auth', 'webkit.json'),
       },
-      // WebKit 有已知的兼容性问题，仅运行基础测试
+      // WebKit 使用兼容测试替代
       testMatch: [
         '**/login.spec.ts',
         '**/page-load.spec.ts',
-        '**/user-flow.spec.ts',
+        '**/webkit-compat.spec.ts',  // WebKit 兼容测试
       ],
       testIgnore: [
         '**/annotations.spec.ts',
@@ -66,30 +66,27 @@ export default defineConfig({
         '**/templates.spec.ts',
         '**/training*.spec.ts',
         '**/inference.spec.ts',
+        '**/user-flow.spec.ts',
       ],
     },
-    // Mobile Chrome 项目 - 跳过布局敏感测试
+    // Mobile Chrome 项目 - 移动端测试配置
     {
       name: 'Mobile Chrome',
       use: {
         ...devices['Pixel 5'],
+        // 优化移动端上下文配置
+        viewport: { width: 412, height: 915 },
+        deviceScaleFactor: 2.625,
+        isMobile: true,
+        hasTouch: true,
+        // 移动端使用独立的 storageState 文件
         storageState: path.join(__dirname, '.auth', 'mobile-chrome.json'),
       },
-      // 移动端布局不同，跳过部分测试
+      // 移动端只运行移动端兼容测试
       testMatch: [
-        '**/login.spec.ts',
-        '**/page-load.spec.ts',
-        '**/user-flow.spec.ts',
-        '**/datasets.spec.ts',
+        '**/mobile-compat.spec.ts',
       ],
-      testIgnore: [
-        '**/annotations.spec.ts',  // Tab 切换在移动端行为不同
-        '**/images.spec.ts',  // 网格布局在移动端不同
-        '**/models.spec.ts',
-        '**/templates.spec.ts',
-        '**/training*.spec.ts',
-        '**/inference.spec.ts',
-      ],
+      testIgnore: [],
     },
     // Login tests project - fresh context without auth
     {

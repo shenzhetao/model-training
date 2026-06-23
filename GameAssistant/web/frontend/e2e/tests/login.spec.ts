@@ -21,25 +21,24 @@ test.describe('登录流程', () => {
     })
 
     await page.goto('/login')
-    await page.waitForLoadState('networkidle')
+    await page.waitForLoadState('domcontentloaded')
 
-    // 验证登录表单存在
+    // 等待登录表单出现
     const usernameInput = page.locator('input[placeholder="用户名"]')
     const passwordInput = page.locator('input[placeholder="密码"]')
-    await expect(usernameInput).toBeVisible()
+    await usernameInput.waitFor({ state: 'visible', timeout: 10000 })
     await expect(passwordInput).toBeVisible()
 
     // 填写登录信息
     await usernameInput.fill('admin')
     await passwordInput.fill('admin123')
-    await page.click('button[type="submit"]')
+    await page.locator('button[type="submit"]').click()
 
     // 等待登录成功后的跳转
     await page.waitForURL('**/images**', { timeout: 15000 })
     await expect(page).toHaveURL(/\/images/)
 
     // 验证跳转到图片管理页
-    // 在移动端 .main-menu 可能隐藏（使用 hide-mobile 类），使用更通用的选择器
     await expect(page.locator('.ant-layout-content')).toBeVisible()
 
     // 验证无关键控制台错误
@@ -63,12 +62,16 @@ test.describe('登录流程', () => {
     const page = await context.newPage()
 
     await page.goto('/login')
-    await page.waitForLoadState('networkidle')
+    await page.waitForLoadState('domcontentloaded')
+
+    // 等待登录表单出现
+    const usernameInput = page.locator('input[placeholder="用户名"]')
+    await usernameInput.waitFor({ state: 'visible', timeout: 10000 })
 
     // 填写错误的登录信息
-    await page.fill('input[placeholder="用户名"]', 'admin')
-    await page.fill('input[placeholder="密码"]', 'wrongpassword')
-    await page.click('button[type="submit"]')
+    await usernameInput.fill('admin')
+    await page.locator('input[placeholder="密码"]').fill('wrongpassword')
+    await page.locator('button[type="submit"]').click()
 
     // 等待错误提示出现
     await page.waitForTimeout(2000)
@@ -76,10 +79,7 @@ test.describe('登录流程', () => {
     // 验证仍在登录页（未跳转到 /images）
     await expect(page).toHaveURL(/\/login/)
 
-    // 验证错误提示出现（Ant Design 的 message 或 ant-message）
-    const errorMessage = page.locator('.ant-message-error').or(page.locator('[class*="message-error"]'))
-    // 或者检查表单是否仍然可见（说明登录失败）
-    const usernameInput = page.locator('input[placeholder="用户名"]')
+    // 验证表单是否仍然可见（说明登录失败）
     await expect(usernameInput).toBeVisible()
 
     await context.close()
@@ -93,41 +93,46 @@ test.describe('登录流程', () => {
 
     // 直接访问受保护的路由
     await page.goto('/images')
-    await page.waitForLoadState('networkidle')
+    await page.waitForLoadState('domcontentloaded')
 
     // 应该被重定向到登录页
     await expect(page).toHaveURL(/\/login/)
 
     // 验证登录表单存在
-    await expect(page.locator('input[placeholder="用户名"]')).toBeVisible()
+    const usernameInput = page.locator('input[placeholder="用户名"]')
+    await usernameInput.waitFor({ state: 'visible', timeout: 10000 })
+    await expect(usernameInput).toBeVisible()
 
     await context.close()
   })
 
-  test('登录页面表单元素完整且可用', async ({ browser, page }) => {
+  test('登录页面表单元素完整且可用', async ({ browser }) => {
     const context = await browser.newContext({
       storageState: undefined
     })
-    const p = await context.newPage()
+    const page = await context.newPage()
 
-    await p.goto('/login')
-    await p.waitForLoadState('networkidle')
+    await page.goto('/login')
+    await page.waitForLoadState('domcontentloaded')
+
+    // 等待登录表单出现
+    const usernameInput = page.locator('input[placeholder="用户名"]')
+    const passwordInput = page.locator('input[placeholder="密码"]')
+    await usernameInput.waitFor({ state: 'visible', timeout: 10000 })
 
     // 验证用户名输入框
-    const usernameInput = p.locator('input[placeholder="用户名"]')
     await expect(usernameInput).toBeVisible()
     await usernameInput.fill('testuser')
     await expect(usernameInput).toHaveValue('testuser')
 
     // 验证密码输入框
-    const passwordInput = p.locator('input[placeholder="密码"]')
     await expect(passwordInput).toBeVisible()
     await passwordInput.fill('testpass')
     // 密码应该是掩码显示
     await expect(passwordInput).toHaveAttribute('type', 'password')
 
     // 验证登录按钮
-    const submitButton = p.locator('button[type="submit"]')
+    const submitButton = page.locator('button[type="submit"]')
     await expect(submitButton).toBeVisible()
     await expect(submitButton).toBeEnabled()
 

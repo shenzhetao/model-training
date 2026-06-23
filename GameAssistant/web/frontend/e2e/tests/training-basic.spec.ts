@@ -42,14 +42,13 @@ test.describe('训练管理 - 基础功能', () => {
     // 验证弹窗出现
     await expect(page.locator('.ant-modal')).toBeVisible({ timeout: 5000 })
     // 验证弹窗标题存在
-    await expect(page.locator('.ant-modal .ant-modal-title').or(page.locator('.ant-modal .ant-modal-header')).first()).toBeVisible()
+    await expect(page.locator('.ant-modal .ant-modal-title').first()).toBeVisible()
 
     // 验证表单元素存在
     await expect(page.locator('.ant-modal input').first()).toBeVisible()
 
-    // 关闭弹窗 - 点击 modal 外部区域
-    const modal = page.locator('.ant-modal')
-    await modal.press('Escape')
+    // 关闭弹窗 - 使用 Escape 键
+    await page.keyboard.press('Escape')
     await page.waitForTimeout(500)
   })
 })
