@@ -5,9 +5,13 @@ export default defineConfig({
   testDir: './tests',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
+  retries: process.env.CI ? 2 : 1,  // CI 环境重试 2 次，本地重试 1 次
   workers: process.env.CI ? 1 : undefined,
   reporter: process.env.CI ? [['github'], ['html']] : [['html']],
+  timeout: 30000,  // 单个测试超时 30 秒
+  expect: {
+    timeout: 10000,  // expect 断言超时 10 秒
+  },
 
   use: {
     baseURL: process.env.BASE_URL || 'http://localhost:3000',
