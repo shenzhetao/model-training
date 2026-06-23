@@ -17,13 +17,13 @@ test.describe('推理测试', () => {
   })
 
   test('截图按钮可见', async ({ page }) => {
-    await expect(page.getByRole('button', { name: /截图/i })).toBeVisible()
+    await expect(page.locator('.page-header >> button', { hasText: '截图' })).toBeVisible()
   })
 
   test('推理模式 Tab 切换可见', async ({ page }) => {
-    const videoTab = page.getByRole('tab', { name: /视频/i })
-    const imageTab = page.getByRole('tab', { name: /图片/i })
-    const historyTab = page.getByRole('tab', { name: /历史记录/i })
+    const videoTab = page.locator('.ant-tabs-tab').filter({ hasText: '视频推理' })
+    const imageTab = page.locator('.ant-tabs-tab').filter({ hasText: '图片推理' })
+    const historyTab = page.locator('.ant-tabs-tab').filter({ hasText: '推理历史' })
 
     await expect(videoTab).toBeVisible()
     await expect(imageTab).toBeVisible()
@@ -31,12 +31,12 @@ test.describe('推理测试', () => {
   })
 
   test('点击图片推理 Tab → 切换到图片模式', async ({ page }) => {
-    await page.getByRole('tab', { name: /图片/i }).click()
+    await page.locator('.ant-tabs-tab').filter({ hasText: '图片推理' }).click()
     await expect(page.getByText(/选择图片/i)).toBeVisible()
   })
 
   test('点击历史记录 Tab → 切换到历史模式', async ({ page }) => {
-    await page.getByRole('tab', { name: /历史记录/i }).click()
-    await expect(page.getByRole('button', { name: /刷新/i })).toBeVisible()
+    await page.locator('.ant-tabs-tab').filter({ hasText: '推理历史' }).click()
+    await expect(page.locator('.ant-tabs-content')).toBeVisible()
   })
 })

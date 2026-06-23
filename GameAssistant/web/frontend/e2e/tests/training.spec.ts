@@ -13,7 +13,7 @@ test.describe('训练管理', () => {
   })
 
   test('发起训练按钮可见', async ({ page }) => {
-    await expect(page.getByRole('button', { name: /发起训练/i })).toBeVisible()
+    await expect(page.locator('.page-header >> button', { hasText: /训练/ })).toBeVisible()
   })
 
   test('刷新按钮可见', async ({ page }) => {

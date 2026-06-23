@@ -21,7 +21,7 @@ test.describe('图片管理', () => {
   })
 
   test('来源筛选下拉框可用', async ({ page }) => {
-    const select = page.locator('input[placeholder="筛选来源"]')
+    const select = page.locator('.page-header input').first()
     await expect(select).toBeVisible()
   })
 
