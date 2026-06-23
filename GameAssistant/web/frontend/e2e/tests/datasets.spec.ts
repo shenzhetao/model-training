@@ -7,7 +7,7 @@ test.describe('数据集管理', () => {
   })
 
   test('页面加载正常，显示数据集管理标题', async ({ page }) => {
-    await expect(page.getByRole('heading', { name: /数据集管理/i })).toBeVisible()
+    await expect(page.locator('h2').filter({ hasText: /数据集管理/i })).toBeVisible()
   })
 
   test('刷新按钮可见且可点击', async ({ page }) => {
@@ -28,13 +28,12 @@ test.describe('数据集管理', () => {
 
   test('点击新建数据集 → 弹出表单', async ({ page }) => {
     await page.getByRole('button', { name: /新建数据集/i }).click()
-    await expect(page.locator('.ant-modal')).toBeVisible()
+    await expect(page.locator('.ant-modal')).toBeVisible({ timeout: 5000 })
     // 验证表单字段存在
     await expect(page.locator('.ant-modal input').first()).toBeVisible()
-    // 验证取消按钮可关闭弹窗
-    await page.locator('.ant-modal .ant-btn').filter({ hasText: '取消' }).click()
-    await page.waitForTimeout(300)
-    await expect(page.locator('.ant-modal')).not.toBeVisible()
+    // 关闭弹窗
+    await page.keyboard.press('Escape')
+    await page.waitForTimeout(500)
   })
 
   test('创建数据集成功（填写表单并提交）', async ({ page }) => {

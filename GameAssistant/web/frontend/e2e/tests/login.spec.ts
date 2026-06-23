@@ -104,30 +104,30 @@ test.describe('登录流程', () => {
     await context.close()
   })
 
-  test('登录页面表单元素完整且可用', async ({ browser }) => {
+  test('登录页面表单元素完整且可用', async ({ browser, page }) => {
     const context = await browser.newContext({
       storageState: undefined
     })
-    const page = await context.newPage()
+    const p = await context.newPage()
 
-    await page.goto('/login')
-    await page.waitForLoadState('networkidle')
+    await p.goto('/login')
+    await p.waitForLoadState('networkidle')
 
     // 验证用户名输入框
-    const usernameInput = page.locator('input[placeholder="用户名"]')
+    const usernameInput = p.locator('input[placeholder="用户名"]')
     await expect(usernameInput).toBeVisible()
     await usernameInput.fill('testuser')
     await expect(usernameInput).toHaveValue('testuser')
 
     // 验证密码输入框
-    const passwordInput = page.locator('input[placeholder="密码"]')
+    const passwordInput = p.locator('input[placeholder="密码"]')
     await expect(passwordInput).toBeVisible()
     await passwordInput.fill('testpass')
     // 密码应该是掩码显示
     await expect(passwordInput).toHaveAttribute('type', 'password')
 
     // 验证登录按钮
-    const submitButton = page.locator('button[type="submit"]')
+    const submitButton = p.locator('button[type="submit"]')
     await expect(submitButton).toBeVisible()
     await expect(submitButton).toBeEnabled()
 

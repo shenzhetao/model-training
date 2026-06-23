@@ -7,7 +7,7 @@ test.describe('模板管理', () => {
   })
 
   test('页面加载正常，显示模板管理标题', async ({ page }) => {
-    await expect(page.getByRole('heading', { name: /模板管理/i })).toBeVisible()
+    await expect(page.locator('h2').filter({ hasText: /模板管理/i })).toBeVisible()
   })
 
   test('工具栏按钮可见', async ({ page }) => {

@@ -7,7 +7,7 @@ test.describe('推理测试', () => {
   })
 
   test('页面加载正常，显示推理测试标题', async ({ page }) => {
-    await expect(page.getByRole('heading', { name: /推理测试/i })).toBeVisible()
+    await expect(page.locator('h2').filter({ hasText: /推理测试/i })).toBeVisible()
   })
 
   test('工具栏按钮可见', async ({ page }) => {

@@ -51,9 +51,10 @@ export default defineConfig({
     // Login tests project - fresh context without auth
     {
       name: 'chromium-fresh',
+      testMatch: ['**/login.spec.ts'],
+      testIgnore: ['**/page-load.spec.ts', '**/training*.spec.ts', '**/images.spec.ts', '**/datasets.spec.ts', '**/models.spec.ts', '**/templates.spec.ts', '**/inference.spec.ts'],
       use: {
         ...devices['Desktop Chrome'],
-        // No storageState - fresh context for login tests
       },
     },
   ],

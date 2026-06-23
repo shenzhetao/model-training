@@ -7,11 +7,11 @@ test.describe('模型管理', () => {
   })
 
   test('页面加载正常，显示模型管理标题', async ({ page }) => {
-    await expect(page.getByRole('heading', { name: /模型管理/i })).toBeVisible()
+    await expect(page.locator('h2').filter({ hasText: /模型管理/i })).toBeVisible()
   })
 
   test('统计卡片可见（如果有模型数据）', async ({ page }) => {
-    await expect(page.getByRole('heading', { name: /模型管理/i })).toBeVisible()
+    await expect(page.locator('h2').filter({ hasText: /模型管理/i })).toBeVisible()
     // 尝试等待统计卡片
     try {
       await page.locator('.ant-statistic').first().waitFor({ state: 'visible', timeout: 5000 })
@@ -56,7 +56,7 @@ test.describe('模型管理', () => {
     // 验证表单元素存在
     await expect(page.getByText(/选择模型文件/i)).toBeVisible()
     // 关闭弹窗
-    await page.locator('.ant-modal .ant-btn').filter({ hasText: '取消' }).click()
+    await page.keyboard.press('Escape')
     await page.waitForTimeout(300)
   })
 
