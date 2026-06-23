@@ -254,7 +254,7 @@
         <p class="empty-hint">点击上方按钮上传图片</p>
       </div>
 
-      <div v-else class="image-grid">
+      <div v-else class="image-grid" ref="gridContainerRef">
         <div
           v-for="(image, index) in imagesStore.images"
           :key="image.id"
@@ -268,9 +268,8 @@
               v-if="visibleImages.has(image.id)"
               :src="getThumbUrl(image.id)"
               :alt="image.original_filename"
-              loading="lazy"
             />
-            <div v-else class="img-placeholder" />
+            <div v-else class="img-placeholder" :data-image-id="image.id" />
             <div class="image-overlay">
               <EyeOutlined />
             </div>
@@ -390,37 +389,61 @@ const sourceFilter = ref<string | null>(null)
 const currentPage = ref(1)
 const lightboxRef = ref<HTMLElement | null>(null)
 const visibleImages = ref<Set<string>>(new Set())
+const gridContainerRef = ref<HTMLElement | null>(null)
 
 // Intersection Observer for lazy loading
 let imageObserver: IntersectionObserver | null = null
 
 function setupImageObserver() {
   if (imageObserver) imageObserver.disconnect()
+
   imageObserver = new IntersectionObserver(
     (entries) => {
       for (const entry of entries) {
         if (entry.isIntersecting) {
-          const id = (entry.target as HTMLElement).dataset.imageId
-          if (id) visibleImages.value.add(id)
+          const el = entry.target as HTMLElement
+          const id = el.dataset.imageId || el.dataset.id
+          if (id) {
+            visibleImages.value.add(id)
+          }
+          imageObserver?.unobserve(entry.target)
         }
       }
     },
-    { rootMargin: '200px', threshold: 0 }
+    {
+      rootMargin: '200px 0px',
+      threshold: 0
+    }
   )
 }
 
-function observeImages() {
+function observeVisibleImages() {
   nextTick(() => {
-    const cards = document.querySelectorAll('.image-card[data-id]')
+    if (!gridContainerRef.value) return
+
+    const cards = gridContainerRef.value.querySelectorAll<HTMLElement>('.image-card[data-id]')
     cards.forEach((el) => {
       if (!imageObserver) return
-      const id = el.getAttribute('data-id')
+      const id = el.dataset.id
       if (id && !visibleImages.value.has(id)) {
+        // Observe the placeholder element inside the card
         const placeholder = el.querySelector('.img-placeholder')
-        if (placeholder) imageObserver.observe(placeholder)
+        if (placeholder) {
+          imageObserver.observe(placeholder)
+        } else {
+          imageObserver.observe(el)
+        }
       }
     })
   })
+}
+
+function cleanupObserver() {
+  if (imageObserver) {
+    imageObserver.disconnect()
+    imageObserver = null
+  }
+  visibleImages.value.clear()
 }
 
 // Video extraction state
@@ -847,31 +870,33 @@ async function handleBatchDelete() {
 // Filter and pagination
 function handleSourceFilterChange(value: string | null) {
   imagesStore.setSourceFilter(value)
-  imagesStore.fetchImages({ source: value as any }).then(() => observeImages())
+  imagesStore.fetchImages({ source: value as any }).then(() => observeVisibleImages())
 }
 
 function handlePageChange(page: number) {
   currentPage.value = page
-  imagesStore.goToPage(page).then(() => observeImages())
+  // Reset visible images on page change
+  visibleImages.value.clear()
+  imagesStore.goToPage(page).then(() => observeVisibleImages())
 }
 
 function handleRefresh() {
-  imagesStore.fetchImages().then(() => observeImages())
+  imagesStore.fetchImages().then(() => observeVisibleImages())
 }
 
 // Lifecycle
 onMounted(() => {
+  setupImageObserver()
   imagesStore.fetchImages()
   loadVideos()
   loadActiveTasks()
-  setupImageObserver()
 })
 
 onUnmounted(() => {
   imagesStore.reset()
   Object.values(pollIntervals).forEach(clearInterval)
   pollIntervals = {}
-  imageObserver?.disconnect()
+  cleanupObserver()
 })
 </script>
 

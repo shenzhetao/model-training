@@ -71,16 +71,23 @@
                 </a-space>
               </template>
 
-              <div v-if="filteredTemplates.length > 0" class="template-grid">
+              <div v-if="filteredTemplates.length > 0" class="template-grid" ref="templateGridRef">
                 <div
                   v-for="t in filteredTemplates"
                   :key="t.id"
+                  :data-id="t.id"
                   class="template-card"
                   :class="{ selected: selectedTemplateId === t.id }"
                   @click="selectTemplate(t)"
                 >
                   <div class="template-thumb">
-                    <img :src="getThumbUrl(t.id)" :alt="t.name" @error="handleImgError" />
+                    <img
+                      v-if="isTemplateVisible(t.id)"
+                      :src="getThumbUrl(t.id)"
+                      :alt="t.name"
+                      @error="handleImgError"
+                    />
+                    <div v-else class="template-placeholder" />
                     <div class="template-overlay">
                       <a-switch v-model:checked="t.is_active" size="small" @click.stop="toggleActive(t)" />
                     </div>
@@ -264,7 +271,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, reactive } from 'vue'
+import { ref, computed, onMounted, onUnmounted, reactive, nextTick } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import { Empty } from 'ant-design-vue'
 import {
@@ -287,6 +294,61 @@ const classes = computed(() => store.classes)
 const testResults = computed(() => store.testResults)
 const testLoading = computed(() => store.testLoading)
 const uploading = computed(() => store.uploading)
+
+// Lazy loading state
+const visibleTemplates = ref<Set<string>>(new Set())
+const templateGridRef = ref<HTMLElement | null>(null)
+let templateObserver: IntersectionObserver | null = null
+
+function setupTemplateObserver() {
+  if (templateObserver) templateObserver.disconnect()
+
+  templateObserver = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          const el = entry.target as HTMLElement
+          const id = el.dataset.id
+          if (id) {
+            visibleTemplates.value.add(id)
+          }
+          templateObserver?.unobserve(entry.target)
+        }
+      })
+    },
+    {
+      rootMargin: '200px 0px',
+      threshold: 0
+    }
+  )
+}
+
+function observeVisibleTemplates() {
+  nextTick(() => {
+    if (!templateGridRef.value) return
+
+    const cards = templateGridRef.value.querySelectorAll<HTMLElement>('.template-card[data-id]')
+    cards.forEach((el) => {
+      if (!templateObserver) return
+      const id = el.dataset.id
+      if (id && !visibleTemplates.value.has(id)) {
+        templateObserver.observe(el)
+      }
+    })
+  })
+}
+
+function isTemplateVisible(id: string): boolean {
+  return visibleTemplates.value.has(id)
+}
+
+function cleanupTemplateObserver() {
+  if (templateObserver) {
+    templateObserver.disconnect()
+    templateObserver = null
+  }
+  visibleTemplates.value.clear()
+}
 
 const searchText = ref('')
 const filterClass = ref<string | null>(null)
@@ -390,6 +452,9 @@ async function loadTemplates() {
   await Promise.all([store.fetchClasses(), store.fetchTemplates()])
   filteredTemplates.value = templates.value
   await loadTestImages()
+  // Setup lazy loading observer after templates are loaded
+  setupTemplateObserver()
+  observeVisibleTemplates()
 }
 
 async function loadTestImages() {
@@ -468,7 +533,13 @@ function handleImgError(e: Event) {
   img.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Crect width='100' height='100' fill='%23f0f0f0'/%3E%3Ctext x='50' y='50' text-anchor='middle' dy='.3em' fill='%23999' font-size='12'%3ENo Image%3C/text%3E%3C/svg%3E"
 }
 
-onMounted(() => { loadTemplates() })
+onMounted(() => {
+  loadTemplates()
+})
+
+onUnmounted(() => {
+  cleanupTemplateObserver()
+})
 </script>
 
 <style scoped>
@@ -482,6 +553,16 @@ onMounted(() => { loadTemplates() })
 .template-card:hover { border-color: #1890ff; }
 .template-card.selected { border-color: #1890ff; background: #e6f7ff; }
 .template-thumb { position: relative; width: 100%; padding-top: 100%; background: #f0f0f0; }
+.template-placeholder {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, #f5f5f5 25%, #e8e8e8 50%, #f5f5f5 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
 .template-thumb img { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain; }
 .template-overlay { position: absolute; top: 4px; right: 4px; }
 .template-info { padding: 8px; }

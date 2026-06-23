@@ -4,6 +4,45 @@ import { message } from 'ant-design-vue'
 
 export interface RequestConfig extends AxiosRequestConfig {
   onUploadProgress?: (progressEvent: AxiosProgressEvent) => void
+  skipCache?: boolean
+}
+
+interface CacheEntry {
+  data: unknown
+  timestamp: number
+  ttl: number
+}
+
+const DEFAULT_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+const requestCache = new Map<string, CacheEntry>()
+
+function generateCacheKey(config: InternalAxiosRequestConfig): string {
+  return `${config.method}:${config.url}:${JSON.stringify(config.params || {})}:${JSON.stringify(config.data || {})}`
+}
+
+function setCachedResponse<T>(key: string, data: T, ttl: number = DEFAULT_CACHE_TTL): void {
+  // Limit cache size
+  if (requestCache.size >= 50) {
+    const firstKey = requestCache.keys().next().value
+    if (firstKey) requestCache.delete(firstKey)
+  }
+  requestCache.set(key, { data, timestamp: Date.now(), ttl })
+}
+
+export function clearRequestCache(): void {
+  requestCache.clear()
+}
+
+export function invalidateCache(predicate?: (key: string) => boolean): void {
+  if (!predicate) {
+    requestCache.clear()
+    return
+  }
+  const keysToDelete: string[] = []
+  requestCache.forEach((_, key) => {
+    if (predicate(key)) keysToDelete.push(key)
+  })
+  keysToDelete.forEach((key) => requestCache.delete(key))
 }
 
 const api = axios.create({
@@ -14,6 +53,7 @@ const api = axios.create({
   },
 })
 
+// Request interceptor for caching
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     const authStore = useAuthStore()
@@ -27,12 +67,22 @@ api.interceptors.request.use(
   }
 )
 
+// Response interceptor for caching GET requests
 api.interceptors.response.use(
-  (response: AxiosResponse) => {
+  async (response: AxiosResponse) => {
+    const config = response.config
+
     // For blob responses, return the raw response object so callers can access response.data
-    if (response.config.responseType === 'blob') {
+    if (config.responseType === 'blob') {
       return response
     }
+
+    // Cache GET requests (not with skipCache flag)
+    if (config.method === 'get' && !(config as RequestConfig).skipCache) {
+      const cacheKey = generateCacheKey(config)
+      setCachedResponse(cacheKey, response.data, DEFAULT_CACHE_TTL)
+    }
+
     return response.data
   },
   async (error: AxiosError) => {

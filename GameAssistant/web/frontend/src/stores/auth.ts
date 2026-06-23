@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import { clearRequestCache } from '@/api/request'
 
 const TOKEN_KEY = 'gameassistant_token'
 const USER_KEY = 'gameassistant_user'
@@ -31,6 +32,8 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = null
     localStorage.removeItem(TOKEN_KEY)
     localStorage.removeItem(USER_KEY)
+    // Clear request cache on logout
+    clearRequestCache()
   }
 
   function updateUser(newUser: Partial<User>) {

@@ -62,7 +62,6 @@ import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { message } from 'ant-design-vue'
 import { UserOutlined, LockOutlined } from '@ant-design/icons-vue'
-import request from '@/api/request'
 import { usersApi } from '@/api/users'
 
 const router = useRouter()

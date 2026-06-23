@@ -1,6 +1,19 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import imagesApi, { type ImageResponse, type ImageQueryParams } from '@/api/images'
+import { invalidateCache } from '@/api/request'
+
+// Simple in-memory cache for image lists
+interface CacheEntry<T> {
+  data: T
+  timestamp: number
+}
+const imageListCache = new Map<string, CacheEntry<{ items: ImageResponse[]; total: number; page: number; page_size: number; total_pages: number }>>()
+const CACHE_TTL = 30 * 1000 // 30 seconds for image lists
+
+function getCacheKey(params: ImageQueryParams): string {
+  return JSON.stringify(params)
+}
 
 export const useImagesStore = defineStore('images', () => {
   // State
@@ -31,6 +44,19 @@ export const useImagesStore = defineStore('images', () => {
   async function fetchImages(params: ImageQueryParams = {}) {
     loading.value = true
     try {
+      // Check cache first
+      const cacheKey = getCacheKey(params)
+      const cached = imageListCache.get(cacheKey)
+      if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+        const cachedData = cached.data
+        images.value = cachedData.items
+        total.value = cachedData.total
+        page.value = cachedData.page
+        pageSize.value = cachedData.page_size
+        totalPages.value = cachedData.total_pages
+        return
+      }
+
       const response = await imagesApi.getList({
         page: params.page || page.value,
         page_size: params.page_size || pageSize.value,
@@ -42,6 +68,12 @@ export const useImagesStore = defineStore('images', () => {
       page.value = response.page
       pageSize.value = response.page_size
       totalPages.value = response.total_pages
+
+      // Cache the response
+      imageListCache.set(cacheKey, {
+        data: { items: response.items, total: response.total, page: response.page, page_size: response.page_size, total_pages: response.total_pages },
+        timestamp: Date.now(),
+      })
     } catch (error) {
       console.error('Failed to fetch images:', error)
       throw error
@@ -88,6 +120,8 @@ export const useImagesStore = defineStore('images', () => {
         // Add to the beginning of the list
         images.value.unshift(response.image)
         total.value++
+        // Invalidate cache
+        invalidateCache()
       }
 
       return response
@@ -129,6 +163,8 @@ export const useImagesStore = defineStore('images', () => {
         total.value--
         // Remove from selection
         selectedIds.value.delete(id)
+        // Invalidate cache
+        invalidateCache()
       }
       return response
     } catch (error) {
@@ -149,6 +185,8 @@ export const useImagesStore = defineStore('images', () => {
         total.value -= response.deleted_count
         // Clear selection
         selectedIds.value.clear()
+        // Invalidate cache
+        invalidateCache()
       }
       return response
     } catch (error) {
