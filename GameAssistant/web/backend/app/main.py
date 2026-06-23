@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 import os
 
 from app.config import settings
-from app.database import engine, init_db
+from app.database import engine, init_db, ensure_admin_user
 from app.api.v1 import api_router
 
 
@@ -14,6 +14,7 @@ async def lifespan(app: FastAPI):
     """Application lifespan events."""
     # Startup
     await init_db()
+    await ensure_admin_user()
     yield
     # Shutdown
     await engine.dispose()

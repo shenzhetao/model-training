@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 hours
 
+    # Admin user (auto-created on startup)
+    ADMIN_USERNAME: str = "admin"
+    ADMIN_PASSWORD: str = "admin123"
+    ADMIN_EMAIL: str = "admin@gameassistant.local"
+
     # File Storage
     UPLOAD_DIR: str = "/app/uploads"
     TEMPLATE_DIR: str = "/app/templates"
