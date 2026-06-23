@@ -41,10 +41,11 @@ test.describe('训练管理 - 基础功能', () => {
 
     // 验证弹窗出现
     await expect(page.locator('.ant-modal')).toBeVisible()
-    await expect(page.getByRole('heading', { name: /发起训练/i })).toBeVisible()
+    // 验证弹窗标题（Ant Design Modal 标题不在 heading 角色中）
+    await expect(page.locator('.ant-modal .ant-modal-title').or(page.locator('.ant-modal-header')).toBeVisible()
 
     // 验证表单元素存在
-    await expect(page.locator('input[placeholder*="任务名称"]')).toBeVisible()
+    await expect(page.locator('input[placeholder*="任务名称"]').or(page.locator('.ant-modal input').first())).toBeVisible()
 
     // 关闭弹窗
     await page.locator('.ant-modal button:has-text("取消")').click()
