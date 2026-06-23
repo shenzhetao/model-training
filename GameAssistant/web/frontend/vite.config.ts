@@ -43,10 +43,10 @@ export default defineConfig({
         manualChunks: {
           // Vue core
           'vue-vendor': ['vue', 'vue-router', 'pinia'],
-          // ECharts - separate chunk for charting library (largest dependency)
-          'echarts': ['echarts', 'vue-echarts'],
           // Axios
           'axios': ['axios'],
+          // ECharts: let Vite tree-shake unused components automatically
+          // vue-echarts and echarts/core handle on-demand imports via main.ts
         },
         chunkFileNames: 'assets/js/[name]-[hash].js',
         entryFileNames: 'assets/js/[name]-[hash].js',
