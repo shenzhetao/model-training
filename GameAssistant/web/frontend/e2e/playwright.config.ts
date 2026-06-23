@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test'
+import * as path from 'path'
 
 export default defineConfig({
   testDir: './tests',
@@ -21,19 +22,31 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: {
+        ...devices['Desktop Chrome'],
+        storageState: path.join(__dirname, '.auth', 'chromium.json'),
+      },
     },
     {
       name: 'firefox',
-      use: { ...devices['Desktop Firefox'] },
+      use: {
+        ...devices['Desktop Firefox'],
+        storageState: path.join(__dirname, '.auth', 'firefox.json'),
+      },
     },
     {
       name: 'webkit',
-      use: { ...devices['Desktop Safari'] },
+      use: {
+        ...devices['Desktop Safari'],
+        storageState: path.join(__dirname, '.auth', 'webkit.json'),
+      },
     },
     {
       name: 'Mobile Chrome',
-      use: { ...devices['Pixel 5'] },
+      use: {
+        ...devices['Pixel 5'],
+        storageState: path.join(__dirname, '.auth', 'mobile-chrome.json'),
+      },
     },
   ],
 
