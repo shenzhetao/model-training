@@ -17,6 +17,7 @@ class ExtractionStatus(str, Enum):
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"
+    CANCELLED = "cancelled"
 
 
 class SourceVideoBase(BaseModel):

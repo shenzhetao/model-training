@@ -83,14 +83,19 @@ async def extract_frames_task(
     db_url: str,
 ):
     """Background task to extract frames from video."""
-    from app.database import AsyncSessionLocal, engine
+    from app.database import async_session_maker
     
-    async with AsyncSessionLocal() as db:
+    async with async_session_maker() as db:
         try:
             import cv2
             import numpy as np
             from PIL import Image
             import io
+            
+            # Check if task was cancelled before starting
+            task = await extraction_task_crud.get(db, task_id)
+            if not task or task.status == "cancelled":
+                return
             
             # Update task status to running
             await extraction_task_crud.update_status(db, task_id, "running")
@@ -158,6 +163,12 @@ async def extract_frames_task(
             duplicates_skipped = 0
             
             for target_frame in frames_to_extract:
+                # Check if task was cancelled before processing each frame
+                task = await extraction_task_crud.get(db, task_id)
+                if not task or task.status == "cancelled":
+                    cap.release()
+                    return
+                
                 cap.set(cv2.CAP_PROP_POS_FRAMES, target_frame)
                 ret, frame = cap.read()
                 
@@ -512,22 +523,6 @@ async def create_extraction_task(
     )
 
 
-@router.get("/tasks/{task_id}", response_model=ExtractionTaskResponse)
-async def get_extraction_task(
-    task_id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """Get extraction task details."""
-    task = await extraction_task_crud.get(db, task_id)
-    if not task:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Extraction task not found"
-        )
-    return task
-
-
 @router.get("/tasks/list", response_model=ExtractionTaskListResponse)
 async def list_extraction_tasks(
     page: int = Query(default=1, ge=1),
@@ -555,3 +550,47 @@ async def list_extraction_tasks(
         page_size=page_size,
         total_pages=total_pages,
     )
+
+
+@router.get("/tasks/{task_id}", response_model=ExtractionTaskResponse)
+async def get_extraction_task(
+    task_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get extraction task details."""
+    task = await extraction_task_crud.get(db, task_id)
+    if not task:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Extraction task not found"
+        )
+    return task
+
+
+@router.delete("/tasks/{task_id}")
+async def cancel_extraction_task(
+    task_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Cancel an extraction task. This will stop the task if it's pending or running."""
+    task = await extraction_task_crud.get(db, task_id)
+    if not task:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Extraction task not found"
+        )
+
+    # Only allow cancelling pending or running tasks
+    if task.status not in ("pending", "running"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot cancel task with status '{task.status}'. Only pending or running tasks can be cancelled."
+        )
+
+    # Update status to cancelled
+    await extraction_task_crud.update_status(db, task_id, "cancelled")
+    await db.commit()
+
+    return {"success": True, "message": "Task cancelled successfully"}

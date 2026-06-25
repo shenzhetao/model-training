@@ -5,10 +5,11 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from fastapi.responses import StreamingResponse
+from sqlalchemy import select, update, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.database import get_db
 from app.models.user import User
+from app.models.annotation import Annotation, AnnotationProject, AnnotationProjectImage, AnnotationReview
 from app.security import get_current_user
 from app.schemas.annotation import (
     AnnotationCreate, AnnotationUpdate, AnnotationResponse,
@@ -25,7 +26,7 @@ from app.crud.annotation import (
 from app.crud.image import image_crud
 from app.config import settings
 
-router = APIRouter()
+router = APIRouter(redirect_slashes=True)
 
 # ── Class routes ────────────────────────────────────────────
 
@@ -92,6 +93,7 @@ async def delete_class(
 @router.get("/images/{image_id}", response_model=ImageAnnotationsResponse)
 async def get_image_annotations(
     image_id: str,
+    project_id: Optional[str] = Query(None, description="Filter by project ID"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -100,7 +102,7 @@ async def get_image_annotations(
     if not image or image.is_deleted:
         raise HTTPException(status_code=404, detail="Image not found")
 
-    annotations = await annotation_crud.get_by_image(db, image_id)
+    annotations = await annotation_crud.get_by_image(db, image_id, project_id)
 
     # Get class names
     class_ids = list({ann.class_id for ann in annotations})
@@ -112,20 +114,7 @@ async def get_image_annotations(
 
     response_anns = []
     for ann in annotations:
-        response_anns.append(AnnotationResponse(
-            id=ann.id,
-            image_id=ann.image_id,
-            class_id=ann.class_id,
-            bbox_x=ann.bbox_x,
-            bbox_y=ann.bbox_y,
-            bbox_width=ann.bbox_width,
-            bbox_height=ann.bbox_height,
-            conf=ann.conf,
-            is_auto_annotated=ann.is_auto_annotated,
-            annotated_by=ann.annotated_by,
-            annotated_at=ann.annotated_at,
-            updated_at=ann.updated_at,
-        ))
+        response_anns.append(AnnotationResponse.model_validate(ann))
 
     return ImageAnnotationsResponse(
         image_id=image_id,
@@ -155,6 +144,23 @@ async def create_annotation(
     ann, is_new = await annotation_crud.upsert(
         db, obj_in.model_dump(), annotated_by=current_user.id
     )
+
+    if is_new:
+        project = await annotation_project_crud.get(db, obj_in.project_id)
+        if project:
+            # Update annotated_images count for the specific project
+            from app.models.annotation import AnnotationProjectImage
+            result = await db.execute(
+                select(func.count(func.distinct(Annotation.image_id)))
+                .where(Annotation.project_id == obj_in.project_id)
+            )
+            annotated_count = result.scalar() or 0
+            await db.execute(
+                update(AnnotationProject)
+                .where(AnnotationProject.id == obj_in.project_id)
+                .values(annotated_images=annotated_count)
+            )
+
     await db.commit()
     return ann
 
@@ -268,6 +274,31 @@ async def create_project(
     return obj
 
 
+@router.get("/projects/review-queue")
+async def get_review_queue(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get all projects pending review (for reviewers)."""
+    skip = (page - 1) * page_size
+    from sqlalchemy import select, func
+    query = select(AnnotationProject).where(
+        AnnotationProject.status.in_(["in_review", "rejected"])
+    ).order_by(AnnotationProject.created_at.desc()).offset(skip).limit(page_size)
+    result = await db.execute(query)
+    projects = list(result.scalars().all())
+
+    count_q = select(func.count(AnnotationProject.id)).where(
+        AnnotationProject.status.in_(["in_review", "rejected"])
+    )
+    total_r = await db.execute(count_q)
+    total = total_r.scalar() or 0
+
+    return {"items": projects, "total": total}
+
+
 @router.get("/projects/{project_id}", response_model=ProjectResponse)
 async def get_project(
     project_id: str,
@@ -279,6 +310,29 @@ async def get_project(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     return project
+
+
+@router.get("/projects/{project_id}/images")
+async def get_project_images(
+    project_id: str,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(500, ge=1, le=500),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get images in a project."""
+    project = await annotation_project_crud.get(db, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    skip = (page - 1) * page_size
+    images, total = await annotation_project_crud.get_project_images(db, project_id, skip, page_size)
+    return {
+        "items": [{"image_id": img.image_id, "added_at": img.assigned_at.isoformat() if img.assigned_at else None} for img in images],
+        "total": total,
+        "page": page,
+        "page_size": page_size
+    }
 
 
 @router.put("/projects/{project_id}", response_model=ProjectResponse)
@@ -350,14 +404,29 @@ async def remove_project_images(
 
 # ── YOLO Export ────────────────────────────────────────────
 
-@router.post("/export/yolo")
-async def export_yolo(
-    req: YOLOExportRequest,
-    background_tasks: BackgroundTasks,
+@router.get("/export/yolo")
+async def export_yolo_get(
+    project_id: Optional[str] = None,
+    image_ids: Optional[str] = None,
+    image_source: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Export annotations as a YOLO-format ZIP (images + txt files)."""
+    """Export annotations as a YOLO-format ZIP (GET version for browser download)."""
+    ids = image_ids.split(",") if image_ids else None
+    req = YOLOExportRequest(
+        project_id=project_id,
+        image_ids=ids,
+        image_source=image_source,
+    )
+    return await _do_export_yolo(req, db)
+
+
+async def _do_export_yolo(
+    req: YOLOExportRequest,
+    db: AsyncSession,
+) -> StreamingResponse:
+    """Internal function to perform YOLO export."""
     from app.config import settings
 
     if req.project_id:
@@ -370,12 +439,12 @@ async def export_yolo(
         if req.image_source != "all":
             query = query.where(Image.source == req.image_source)
         result = await db.execute(query)
-        image_ids = [r[0] for r in result.all()]
+        image_ids = [row[0] for row in result.fetchall()]
     else:
-        raise HTTPException(status_code=400, detail="Provide project_id, image_ids, or image_source")
-
-    if not image_ids:
-        raise HTTPException(status_code=400, detail="No images found")
+        from sqlalchemy import select
+        query = select(Image.id).where(Image.is_deleted == False)
+        result = await db.execute(query)
+        image_ids = [row[0] for row in result.fetchall()]
 
     zip_bytes = await annotation_crud.export_yolo_zip(db, image_ids)
 
@@ -392,6 +461,17 @@ async def export_yolo(
             "X-Total-Images": str(len(image_ids)),
         },
     )
+
+
+@router.post("/export/yolo")
+async def export_yolo_post(
+    req: YOLOExportRequest,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Export annotations as a YOLO-format ZIP (images + txt files)."""
+    return await _do_export_yolo(req, db)
 
 
 @router.get("/stats", response_model=ProjectStatsResponse)
@@ -438,76 +518,267 @@ async def submit_for_review(
     project = await annotation_project_crud.get(db, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    if project.status not in ("draft", "in_progress"):
-        raise HTTPException(status_code=400, detail=f"Cannot submit project in status '{project.status}'")
-    updated = await annotation_project_crud.update(db, project_id, {
-        "status": "in_review",
-    })
+    # All statuses are allowed so that the annotator can re-submit after fixes
+    # (e.g., a project that was approved, rejected, or even previously completed
+    # and needs more annotations). Status is forced to in_review here.
+    update_data: dict = {"status": "in_review"}
+    # Clear stale review feedback when re-submitting so the reviewer sees a clean slate
+    if project.status in ("rejected", "completed"):
+        update_data["review_feedback"] = ""
+    updated = await annotation_project_crud.update(db, project_id, update_data)
     await db.commit()
     return updated
 
 
-@router.post("/projects/{project_id}/approve")
-async def approve_project(
+@router.post("/projects/{project_id}/images/{image_id}/review")
+async def review_project_image(
+    project_id: str,
+    image_id: str,
+    req: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Review a single image in a project (approve or request_changes)."""
+    project = await annotation_project_crud.get(db, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if project.status not in ("in_review", "rejected"):
+        raise HTTPException(status_code=400, detail=f"Cannot review project in status '{project.status}'")
+
+    action = req.get("action", "approve")
+    reason = req.get("reason", "")
+    if action not in ("approve", "request_changes"):
+        raise HTTPException(status_code=400, detail="action must be 'approve' or 'request_changes'")
+
+    # Verify image is in this project
+    image_in = (await db.execute(
+        select(AnnotationProjectImage)
+        .where(
+            and_(
+                AnnotationProjectImage.annotation_project_id == project_id,
+                AnnotationProjectImage.image_id == image_id,
+            )
+        )
+    )).scalar_one_or_none()
+    if not image_in:
+        raise HTTPException(status_code=404, detail="Image not in this project")
+
+    # Upsert review record
+    existing = (await db.execute(
+        select(AnnotationReview)
+        .where(
+            and_(
+                AnnotationReview.annotation_project_id == project_id,
+                AnnotationReview.image_id == image_id,
+            )
+        )
+    )).scalar_one_or_none()
+
+    if existing:
+        existing.review_status = action
+        existing.rejection_reason = reason if action == "request_changes" else ""
+        existing.reviewer_id = current_user.id
+        existing.reviewed_at = datetime.utcnow()
+    else:
+        db.add(AnnotationReview(
+            annotation_project_id=project_id,
+            image_id=image_id,
+            review_status=action,
+            reviewer_id=current_user.id,
+            rejection_reason=reason if action == "request_changes" else "",
+        ))
+
+    # Recompute reviewed_images and possibly auto-complete the project
+    await _recompute_project_review_status(db, project_id)
+    await db.commit()
+    return {"success": True, "action": action}
+
+
+@router.get("/projects/{project_id}/image-reviews")
+async def get_project_image_reviews(
     project_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Approve a project (reviewer accepts all annotations)."""
+    """Get per-image review statuses for a project."""
     project = await annotation_project_crud.get(db, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    updated = await annotation_project_crud.update(db, project_id, {
-        "status": "completed",
-        "completed_at": datetime.utcnow(),
-    })
+
+    reviews_result = await db.execute(
+        select(AnnotationReview).where(AnnotationReview.annotation_project_id == project_id)
+    )
+    reviews = {r.image_id: {
+        "review_status": r.review_status,
+        "rejection_reason": r.rejection_reason,
+        "reviewed_at": r.reviewed_at.isoformat() if r.reviewed_at else None,
+        "reviewer_id": r.reviewer_id,
+    } for r in reviews_result.scalars().all()}
+
+    return {"reviews": reviews}
+
+
+async def _recompute_project_review_status(db: AsyncSession, project_id: str) -> None:
+    """Recompute reviewed_images count and auto-complete project if all images approved."""
+    from app.models.annotation import AnnotationProjectImage, AnnotationReview
+    # Count images in the project
+    total_result = await db.execute(
+        select(func.count(AnnotationProjectImage.id))
+        .where(AnnotationProjectImage.annotation_project_id == project_id)
+    )
+    total_images = total_result.scalar() or 0
+
+    # Count approved reviews
+    approved_result = await db.execute(
+        select(func.count(AnnotationReview.id))
+        .where(
+            and_(
+                AnnotationReview.annotation_project_id == project_id,
+                AnnotationReview.review_status == "approve",
+            )
+        )
+    )
+    approved_count = approved_result.scalar() or 0
+
+    # Count request_changes reviews
+    rejected_result = await db.execute(
+        select(func.count(AnnotationReview.id))
+        .where(
+            and_(
+                AnnotationReview.annotation_project_id == project_id,
+                AnnotationReview.review_status == "request_changes",
+            )
+        )
+    )
+    rejected_count = rejected_result.scalar() or 0
+
+    reviewed_count = approved_count + rejected_count
+
+    update_data = {"reviewed_images": reviewed_count}
+
+    # Auto-complete only when: project is in_review AND every project image is approved
+    project = await annotation_project_crud.get(db, project_id)
+    if (
+        project
+        and project.status in ("in_review", "rejected")
+        and total_images > 0
+        and approved_count == total_images
+    ):
+        update_data["status"] = "completed"
+        update_data["completed_at"] = datetime.utcnow()
+
+    await db.execute(
+        update(AnnotationProject)
+        .where(AnnotationProject.id == project_id)
+        .values(**update_data)
+    )
+    await db.flush()
+
+
+
+@router.post("/projects/{project_id}/bulk-approve")
+async def bulk_approve_project(
+    project_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Approve all images in a project and complete the project."""
+    project = await annotation_project_crud.get(db, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if project.status not in ("in_review", "rejected"):
+        raise HTTPException(status_code=400, detail=f"Cannot approve project in status '{project.status}'")
+
+    image_ids = (await db.execute(
+        select(AnnotationProjectImage.image_id)
+        .where(AnnotationProjectImage.annotation_project_id == project_id)
+    )).scalars().all()
+
+    if not image_ids:
+        raise HTTPException(status_code=400, detail="Project has no images to approve")
+
+    existing = (await db.execute(
+        select(AnnotationReview).where(AnnotationReview.annotation_project_id == project_id)
+    )).scalars().all()
+    existing_by_image = {r.image_id: r for r in existing}
+
+    for image_id in image_ids:
+        if image_id in existing_by_image:
+            rec = existing_by_image[image_id]
+            rec.review_status = "approve"
+            rec.rejection_reason = ""
+            rec.reviewer_id = current_user.id
+            rec.reviewed_at = datetime.utcnow()
+        else:
+            db.add(AnnotationReview(
+                annotation_project_id=project_id,
+                image_id=image_id,
+                review_status="approve",
+                reviewer_id=current_user.id,
+            ))
+
+    await _recompute_project_review_status(db, project_id)
     await db.commit()
-    return {"success": True, "message": f"Project '{project.name}' approved and completed"}
+    return {"success": True, "approved_count": len(image_ids), "status": "completed"}
 
 
-@router.post("/projects/{project_id}/reject")
-async def reject_project(
+@router.post("/projects/{project_id}/bulk-reject")
+async def bulk_reject_project(
     project_id: str,
     req: dict,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Reject a project and return it to annotator with feedback."""
+    """Reject all images in a project and return it to the annotator."""
     project = await annotation_project_crud.get(db, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    feedback = req.get("feedback", "")
-    updated = await annotation_project_crud.update(db, project_id, {
-        "status": "rejected",
-        "review_feedback": feedback,
-    })
-    await db.commit()
-    return {"success": True, "message": f"Project returned to annotator with feedback"}
+    if project.status not in ("in_review", "rejected"):
+        raise HTTPException(status_code=400, detail=f"Cannot reject project in status '{project.status}'")
 
+    reason = (req or {}).get("reason", "一键退回")
 
-@router.get("/projects/review-queue")
-async def get_review_queue(
-    page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """Get all projects pending review (for reviewers)."""
-    skip = (page - 1) * page_size
-    from sqlalchemy import select
-    query = select(AnnotationProject).where(
-        AnnotationProject.status.in_(["in_review", "rejected"])
-    ).order_by(AnnotationProject.created_at.desc()).offset(skip).limit(page_size)
-    result = await db.execute(query)
-    projects = list(result.scalars().all())
+    image_ids = (await db.execute(
+        select(AnnotationProjectImage.image_id)
+        .where(AnnotationProjectImage.annotation_project_id == project_id)
+    )).scalars().all()
 
-    count_q = select(func.count(AnnotationProject.id)).where(
-        AnnotationProject.status.in_(["in_review", "rejected"])
+    if not image_ids:
+        raise HTTPException(status_code=400, detail="Project has no images to reject")
+
+    existing = (await db.execute(
+        select(AnnotationReview).where(AnnotationReview.annotation_project_id == project_id)
+    )).scalars().all()
+    existing_by_image = {r.image_id: r for r in existing}
+
+    for image_id in image_ids:
+        if image_id in existing_by_image:
+            rec = existing_by_image[image_id]
+            rec.review_status = "request_changes"
+            rec.rejection_reason = reason
+            rec.reviewer_id = current_user.id
+            rec.reviewed_at = datetime.utcnow()
+        else:
+            db.add(AnnotationReview(
+                annotation_project_id=project_id,
+                image_id=image_id,
+                review_status="request_changes",
+                rejection_reason=reason,
+                reviewer_id=current_user.id,
+            ))
+
+    # Mark project as rejected
+    await db.execute(
+        update(AnnotationProject)
+        .where(AnnotationProject.id == project_id)
+        .values(
+            status="rejected",
+            review_feedback=reason,
+            reviewed_images=len(image_ids),
+        )
     )
-    total_r = await db.execute(count_q)
-    total = total_r.scalar() or 0
-
-    return {"items": projects, "total": total}
+    await db.commit()
+    return {"success": True, "rejected_count": len(image_ids), "status": "rejected"}
 
 
 @router.post("/annotations/{annotation_id}/review")

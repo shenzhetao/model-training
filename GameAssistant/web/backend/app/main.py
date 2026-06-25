@@ -1,8 +1,10 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
 import os
+import traceback
 
 from app.config import settings
 from app.database import engine, init_db, ensure_admin_user
@@ -25,7 +27,24 @@ app = FastAPI(
     version=settings.APP_VERSION,
     description="GameAssistant Model Training Platform API",
     lifespan=lifespan,
+    redirect_slashes=False,
 )
+
+# Global exception handler — must be registered after app creation
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Catch all unhandled exceptions and log them."""
+    import logging
+    logging.getLogger(__name__).error(
+        "Unhandled exception on %s: %s\n%s",
+        request.url.path,
+        exc,
+        "".join(traceback.format_exception(type(exc), exc, exc.__traceback__)),
+    )
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"{type(exc).__name__}: {exc}"},
+    )
 
 # CORS middleware
 app.add_middleware(

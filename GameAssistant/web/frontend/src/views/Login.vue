@@ -79,9 +79,11 @@ async function handleLogin() {
   loading.value = true
   try {
     const response = await usersApi.login(formState)
+    // Persist token FIRST so the next request's Authorization header is attached
+    authStore.setToken(response.access_token)
     // Fetch current user info after login
     const userInfo = await usersApi.getCurrentUser()
-    authStore.setAuth(response.access_token, userInfo)
+    authStore.setUser(userInfo)
     const redirect = route.query.redirect as string || '/images'
     router.push(redirect)
     message.success('登录成功')

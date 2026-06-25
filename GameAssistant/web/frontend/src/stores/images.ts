@@ -44,10 +44,10 @@ export const useImagesStore = defineStore('images', () => {
   async function fetchImages(params: ImageQueryParams = {}) {
     loading.value = true
     try {
-      // Check cache first
+      // Check cache first (unless skipCache is true)
       const cacheKey = getCacheKey(params)
       const cached = imageListCache.get(cacheKey)
-      if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      if (cached && Date.now() - cached.timestamp < CACHE_TTL && !params.skipCache) {
         const cachedData = cached.data
         images.value = cachedData.items
         total.value = cachedData.total
@@ -117,11 +117,8 @@ export const useImagesStore = defineStore('images', () => {
       })
 
       if (response.success && response.image) {
-        // Add to the beginning of the list
-        images.value.unshift(response.image)
-        total.value++
-        // Invalidate cache
-        invalidateCache()
+        // Refresh the list to ensure accurate pagination
+        await fetchImages({ page: page.value, skipCache: true })
       }
 
       return response
@@ -140,8 +137,8 @@ export const useImagesStore = defineStore('images', () => {
       })
 
       if (response.success) {
-        // Refresh the list to show new images
-        await fetchImages()
+        // Refresh the list to ensure accurate pagination
+        await fetchImages({ page: page.value, skipCache: true })
       }
 
       return response
@@ -165,6 +162,12 @@ export const useImagesStore = defineStore('images', () => {
         selectedIds.value.delete(id)
         // Invalidate cache
         invalidateCache()
+
+        // If current page is empty, go to previous page
+        if (images.value.length === 0 && page.value > 1) {
+          page.value--
+          await fetchImages({ page: page.value })
+        }
       }
       return response
     } catch (error) {
@@ -187,6 +190,12 @@ export const useImagesStore = defineStore('images', () => {
         selectedIds.value.clear()
         // Invalidate cache
         invalidateCache()
+
+        // If current page is empty, go to previous page
+        if (images.value.length === 0 && page.value > 1) {
+          page.value--
+          await fetchImages({ page: page.value })
+        }
       }
       return response
     } catch (error) {

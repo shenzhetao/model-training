@@ -93,7 +93,7 @@ async def _run_training(job_id: str, user_id: str):
             await db.commit()
             return
 
-        yaml_content = version.dataset_yaml_content or "path: .\ntames:\n  - class_0\n"
+        yaml_content = version.dataset_yaml_content or "path: .\ntrain: train/images\nval: val/images\nnames:\n  - class_0\n"
         yaml_dir = os.path.join(settings.MODEL_DIR, "datasets")
         os.makedirs(yaml_dir, exist_ok=True)
         yaml_path = os.path.join(yaml_dir, f"{job_id}.yaml")

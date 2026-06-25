@@ -58,6 +58,7 @@ export interface ImageQueryParams {
   page?: number
   page_size?: number
   source?: 'upload' | 'adb' | 'video'
+  skipCache?: boolean
 }
 
 export const imagesApi = {
@@ -71,7 +72,7 @@ export const imagesApi = {
     if (params.source) queryParams.set('source', params.source)
 
     const query = queryParams.toString()
-    return request.get(`/images${query ? `?${query}` : ''}`)
+    return request.get(query ? `/images?${query}` : '/images')
   },
 
   /**

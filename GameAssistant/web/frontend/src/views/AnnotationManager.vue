@@ -38,7 +38,7 @@
     </a-row>
 
     <!-- Main Tabs -->
-    <a-tabs v-model:activeKey="activeTab">
+    <a-tabs v-model:activeKey="activeTab" @change="onTabChange">
       <!-- Projects Tab -->
       <a-tab-pane key="projects" tab="标注项目">
         <div class="tab-toolbar">
@@ -52,7 +52,10 @@
             >
               <a-select-option value="draft">草稿</a-select-option>
               <a-select-option value="in_progress">进行中</a-select-option>
+              <a-select-option value="in_review">待审核</a-select-option>
               <a-select-option value="completed">已完成</a-select-option>
+              <a-select-option value="rejected">已退回</a-select-option>
+              <a-select-option value="reviewed">已审核</a-select-option>
             </a-select>
           </a-space>
         </div>
@@ -83,6 +86,7 @@
               <a-space>
                 <a-button type="link" size="small" @click="openProject(record)">标注</a-button>
                 <a-button type="link" size="small" @click="editProject(record)">编辑</a-button>
+                <a-button type="link" size="small" @click="handleSubmitForReviewById(record.id)">提交审核</a-button>
                 <a-button type="link" danger size="small" @click="deleteProject(record)">删除</a-button>
               </a-space>
             </template>
@@ -96,6 +100,28 @@
           <!-- Left: Image List -->
           <a-col :span="8">
             <a-card title="图片列表" size="small">
+              <template #extra>
+                <a-space>
+                  <a-select
+                    v-model:value="annotateProjectId"
+                    placeholder="选择项目"
+                    style="width: 140px"
+                    @change="onAnnotateProjectChange"
+                  >
+                    <a-select-option v-for="p in projects" :key="p.id" :value="p.id">
+                      {{ p.name }}
+                    </a-select-option>
+                  </a-select>
+                  <a-button
+                    size="small"
+                    type="primary"
+                    :disabled="!canAddToProject"
+                    @click="addSelectedImageToProject"
+                  >
+                    添加到项目
+                  </a-button>
+                </a-space>
+              </template>
               <div class="image-filter">
                 <a-select
                   v-model:value="annotateSourceFilter"
@@ -120,8 +146,27 @@
                   <img :src="getImageUrl(img.id)" :alt="img.original_filename" class="thumb" />
                   <div class="image-item-info">
                     <span class="img-name">{{ img.original_filename }}</span>
-                    <span class="img-meta">{{ img.width }}x{{ img.height }}</span>
+                    <span class="img-meta">
+                      {{ img.width }}x{{ img.height }}
+                      <a-tag
+                        v-if="getImageStatusTag(img.id)"
+                        :color="getImageStatusTag(img.id)!.color"
+                        size="small"
+                        style="margin-left:4px"
+                      >{{ getImageStatusTag(img.id)!.text }}</a-tag>
+                    </span>
                   </div>
+                  <a-button
+                    v-if="annotateProjectId && isImageInProject(img.id)"
+                    type="text"
+                    danger
+                    size="small"
+                    class="remove-from-project-btn"
+                    @click.stop="removeImageFromProject(img.id)"
+                    title="从项目中移除"
+                  >
+                    <template #icon><CloseOutlined /></template>
+                  </a-button>
                 </div>
               </div>
               <a-empty v-else description="暂无图片，请先上传图片" />
@@ -283,7 +328,7 @@
       <!-- Review Tab -->
       <a-tab-pane key="review" tab="审核管理">
         <a-row :gutter="16">
-          <a-col :span="selectedReview ? 12 : 24">
+          <a-col :span="selectedReview ? 14 : 24">
             <a-card title="审核队列" size="small">
               <template #extra>
                 <a-space>
@@ -295,7 +340,6 @@
                 </a-space>
               </template>
 
-              <!-- Review Stats -->
               <a-row :gutter="12" style="margin-bottom:16px">
                 <a-col :span="6"><a-statistic title="待审核" :value="reviewStats.pending_review" /></a-col>
                 <a-col :span="6"><a-statistic title="已退回" :value="reviewStats.needs_revision" /></a-col>
@@ -326,7 +370,7 @@
           </a-col>
 
           <!-- Review Detail -->
-          <a-col :span="12" v-if="selectedReview">
+          <a-col :span="10" v-if="selectedReview">
             <a-card size="small">
               <template #title>
                 <div style="display:flex;align-items:center;gap:8px">
@@ -335,7 +379,7 @@
                 </div>
               </template>
               <template #extra>
-                <a-button type="link" size="small" @click="selectedReview = null">关闭</a-button>
+                <a-button type="link" size="small" @click="closeReviewDetail">关闭</a-button>
               </template>
 
               <a-descriptions :column="2" size="small" bordered style="margin-bottom:16px">
@@ -348,20 +392,60 @@
                 <a-descriptions-item label="描述">{{ selectedReview.description || '-' }}</a-descriptions-item>
               </a-descriptions>
 
-              <div class="section-label">退回反馈</div>
+              <div class="section-label">图片审核</div>
               <a-divider style="margin: 8px 0" />
-              <p v-if="selectedReview.review_feedback" style="color:#f5222d;font-size:13px">{{ selectedReview.review_feedback }}</p>
-              <a-empty v-else description="暂无反馈" :image="Empty.PRESENTED_IMAGE_SIMPLE" />
+              <div v-if="reviewImageLoading" style="text-align:center;padding:24px">
+                <a-spin />
+              </div>
+              <a-empty v-else-if="!reviewImages.length" description="该项目暂无图片" :image="Empty.PRESENTED_IMAGE_SIMPLE" />
+              <div v-else style="max-height: 420px; overflow-y: auto; padding-right: 4px">
+                <a-list size="small" :data-source="reviewImages" item-layout="vertical">
+                  <template #renderItem="{ item }">
+                    <a-list-item :key="item.id">
+                      <template #actions>
+                        <a-tag v-if="getImageReviewStatus(item.id) === 'approve'" color="success">已通过</a-tag>
+                        <a-tag v-else-if="getImageReviewStatus(item.id) === 'request_changes'" color="error">已退回</a-tag>
+                        <a-tag v-else color="default">未审核</a-tag>
+                        <a-button
+                          size="small"
+                          type="primary"
+                          :loading="reviewImageSubmitting === item.id + ':approve'"
+                          @click="confirmSingleApprove(item)"
+                        >通过</a-button>
+                        <a-button
+                          size="small"
+                          danger
+                          :loading="reviewImageSubmitting === item.id + ':reject'"
+                          @click="openSingleRejectModal(item)"
+                        >退回</a-button>
+                      </template>
+                      <a-list-item-meta :description="getImageReviewReason(item.id)">
+                        <template #title>
+                          <div style="display:flex;align-items:center;gap:8px">
+                            <a-image
+                              :src="`/images/${item.id}/serve?size=128`"
+                              :width="48"
+                              :height="48"
+                              style="object-fit: cover; border-radius: 4px"
+                            />
+                            <span>{{ item.original_filename || item.id }}</span>
+                          </div>
+                        </template>
+                      </a-list-item-meta>
+                    </a-list-item>
+                  </template>
+                </a-list>
+              </div>
 
-              <div class="section-label">审核操作</div>
+              <div class="section-label" style="margin-top: 16px">项目级操作</div>
               <a-divider style="margin: 8px 0" />
               <a-space direction="vertical" style="width:100%">
-                <a-button type="primary" block @click="handleApproveProject(selectedReview)" :loading="reviewActionLoading">
-                  <template #icon><CheckOutlined /></template>通过审核
+                <a-button type="primary" block @click="confirmBulkApprove" :loading="reviewActionLoading">
+                  <template #icon><CheckOutlined /></template>一键通过全部图片并完成项目
                 </a-button>
-                <a-textarea v-model:value="rejectFeedback" placeholder="填写退回原因（可选）" :rows="2" />
-                <a-button type="default" block danger @click="handleRejectProject(selectedReview)" :loading="reviewActionLoading">
-                  <template #icon><CloseOutlined /></template>退回修改
+                <a-textarea v-model:value="rejectFeedback" placeholder="一键退回时使用的退回原因" :rows="2" />
+                <a-button type="default" block danger @click="confirmBulkReject" :loading="reviewActionLoading">
+                  <template #icon><CloseOutlined /></template>一键退回全部图片
                 </a-button>
               </a-space>
             </a-card>
@@ -369,6 +453,30 @@
         </a-row>
       </a-tab-pane>
     </a-tabs>
+
+    <!-- Single-image reject modal -->
+    <a-modal
+      v-model:open="showSingleRejectModal"
+      title="退回该图片"
+      ok-text="确认退回"
+      cancel-text="取消"
+      :ok-button-props="{ danger: true }"
+      @ok="handleSingleRejectConfirm"
+    >
+      <p style="margin-bottom: 8px">图片：{{ singleRejectTarget?.original_filename || singleRejectTarget?.id }}</p>
+      <a-textarea v-model:value="singleRejectReason" placeholder="填写退回原因" :rows="3" />
+    </a-modal>
+
+    <!-- Bulk confirm modal -->
+    <a-modal
+      v-model:open="showBulkConfirm"
+      :title="bulkConfirmTitle"
+      :ok-text="bulkConfirmOkText"
+      :ok-button-props="bulkConfirmDanger ? { danger: true } : { type: 'primary' }"
+      @ok="handleBulkConfirm"
+    >
+      <p>{{ bulkConfirmContent }}</p>
+    </a-modal>
 
     <!-- Create/Edit Project Modal -->
     <a-modal
@@ -491,7 +599,8 @@ async function loadStats() {
 const projectFilter = ref<string | null>(null)
 
 const projectColumns = [
-  { title: '名称', dataIndex: 'name', key: 'name' },
+  { title: '名称', dataIndex: 'name', key: 'name', width: 180, ellipsis: true },
+  { title: '描述', dataIndex: 'description', key: 'description', width: 160, ellipsis: true },
   { title: '状态', key: 'status', width: 100 },
   { title: '进度', key: 'progress', width: 180 },
   { title: '已审核', key: 'reviewed_images', width: 80,
@@ -505,18 +614,88 @@ async function loadProjects() {
   await annStore.fetchProjects({ status: projectFilter.value || undefined })
 }
 
+function getStatusLabel(status: string): string {
+  const map: Record<string, string> = {
+    draft: '草稿',
+    in_progress: '进行中',
+    in_review: '待审核',
+    completed: '已完成',
+    reviewed: '已审核',
+    rejected: '已退回',
+  }
+  return map[status] || status
+}
+
 function getStatusColor(status: string): string {
   const map: Record<string, string> = {
-    draft: 'default', in_progress: 'processing', completed: 'success', reviewed: 'purple',
+    draft: 'default',
+    in_progress: 'processing',
+    in_review: 'blue',
+    completed: 'success',
+    reviewed: 'success',
+    rejected: 'error',
   }
   return map[status] || 'default'
 }
 
-function getStatusLabel(status: string): string {
-  const map: Record<string, string> = {
-    draft: '草稿', in_progress: '进行中', completed: '已完成', reviewed: '已审核',
+// ── Annotate Tab Project Selection ──────────────────────────
+const annotateProjectId = ref<string | null>(null)
+const projectImageIds = ref<Set<string>>(new Set())
+
+const canAddToProject = computed(() => {
+  if (!annotateProjectId.value || !selectedAnnotateImageId.value) return false
+  return !projectImageIds.value.has(selectedAnnotateImageId.value)
+})
+
+function isImageInProject(imageId: string): boolean {
+  return projectImageIds.value.has(imageId)
+}
+
+function getImageStatusTag(imageId: string) {
+  if (!isImageInProject(imageId)) return null
+  if (!annotateProjectId.value) return null
+  const savedSet = savedImageIds.value.get(annotateProjectId.value)
+  if (savedSet?.has(imageId)) return { color: 'green', text: '已保存' }
+  return { color: 'blue', text: '已添加' }
+}
+
+async function onAnnotateProjectChange(projectId: string) {
+  annotateProjectId.value = projectId
+  // 切换项目时清空当前画布
+  selectedAnnotateImageId.value = null
+  annStore.annotations = []
+  await loadProjectImages(projectId)
+}
+
+async function loadProjectImages(projectId: string) {
+  try {
+    const res: any = await annotationsApi.getProjectImages(projectId)
+    const imageIds = res.items?.map((item: any) => item.image_id) || []
+    projectImageIds.value = new Set(imageIds)
+    // 清除不属于新项目的已保存记录
+    savedImageIds.value.set(projectId, new Set())
+  } catch (error) {
+    console.error('Failed to load project images:', error)
+    projectImageIds.value = new Set()
   }
-  return map[status] || status
+}
+
+// Tab 切换时刷新数据
+async function onTabChange(tabKey: string) {
+  switch (tabKey) {
+    case 'projects':
+      await loadProjects()
+      break
+    case 'annotate':
+      await loadAnnotateImages()
+      break
+    case 'classes':
+      await annStore.fetchClasses()
+      break
+    case 'review':
+      await loadReviewQueue()
+      break
+  }
 }
 
 // Project modal
@@ -588,9 +767,29 @@ async function deleteProject(project: AnnotationProject) {
   })
 }
 
-function openProject(_project: AnnotationProject) {
+function openProject(project: AnnotationProject) {
+  currentProjectId.value = project.id
+  annStore.currentProject = project
   activeTab.value = 'annotate'
+  // 设置当前项目并加载项目图片
+  annotateProjectId.value = project.id
+  loadProjectImages(project.id)
 }
+
+function selectProject(projectId: string) {
+  currentProjectId.value = projectId
+  const project = projects.value.find(p => p.id === projectId)
+  if (project) {
+    annStore.currentProject = project
+  }
+  activeTab.value = 'annotate'
+  // 设置当前项目并加载项目图片
+  annotateProjectId.value = projectId
+  loadProjectImages(projectId)
+}
+
+// Current project for review submission
+const currentProjectId = ref<string | null>(null)
 
 // ── Annotate ────────────────────────────────────────────────
 const annotateImages = ref<ImageResponse[]>([])
@@ -600,6 +799,9 @@ const annotatePage = ref(1)
 const annotateTotal = ref(0)
 const drawMode = ref<'view' | 'draw' | 'edit'>('view')
 const selectedClassId = ref<string | null>(null)
+const selectedAnnotationId = ref<string | null>(null)  // 当前选中的标注ID
+// 已保存的图片ID集合，按项目隔离: Map<projectId, Set<imageId>>
+const savedImageIds = ref<Map<string, Set<string>>>(new Map())
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const canvasContainer = ref<HTMLDivElement | null>(null)
@@ -609,6 +811,10 @@ const rowHeight = 40
 let isDrawing = false
 let drawStartX = 0
 let drawStartY = 0
+let isDragging = false
+let dragAnnotationId: string | null = null
+let dragOffsetX = 0
+let dragOffsetY = 0
 let scale = 1
 
 const scrollTop = ref(0)
@@ -649,9 +855,55 @@ function getImageUrl(id: string): string {
 
 async function selectAnnotateImage(img: ImageResponse) {
   selectedAnnotateImageId.value = img.id
-  await annStore.loadImageAnnotations(img.id)
+  await annStore.loadImageAnnotations(img.id, annotateProjectId.value || undefined)
   await nextTick()
   renderCanvas()
+}
+
+async function addSelectedImageToProject() {
+  if (!annotateProjectId.value || !selectedAnnotateImageId.value) {
+    message.warning('请先选择一个项目和一张图片')
+    return
+  }
+  try {
+    await annotationsApi.addProjectImages(annotateProjectId.value, [selectedAnnotateImageId.value])
+    message.success('图片已添加到项目')
+    savedImageIds.value.get(annotateProjectId.value)?.delete(selectedAnnotateImageId.value)
+    await loadProjectImages(annotateProjectId.value)
+    await loadProjects()
+    await loadStats()
+  } catch (error: any) {
+    message.error(error?.response?.data?.detail || '添加失败')
+  }
+}
+
+async function removeImageFromProject(imageId: string) {
+  if (!annotateProjectId.value) {
+    message.warning('请先选择一个项目')
+    return
+  }
+  Modal.confirm({
+    title: '确认移除',
+    content: '确定要从项目中移除这张图片吗？',
+    okText: '移除',
+    okType: 'danger',
+    async onOk() {
+      try {
+        await annotationsApi.removeProjectImages(annotateProjectId.value!, [imageId])
+        message.success('图片已从项目移除')
+        projectImageIds.value.delete(imageId)
+        savedImageIds.value.get(annotateProjectId.value)?.delete(imageId)
+        if (selectedAnnotateImageId.value === imageId) {
+          selectedAnnotateImageId.value = null
+          annStore.annotations = []
+        }
+        await loadProjects()
+        await loadStats()
+      } catch (error: any) {
+        message.error(error?.response?.data?.detail || '移除失败')
+      }
+    },
+  })
 }
 
 function getClassColor(classId: string): string {
@@ -660,6 +912,16 @@ function getClassColor(classId: string): string {
 }
 
 function setDrawMode(mode: 'view' | 'draw' | 'edit') {
+  if (mode === 'draw') {
+    if (!classes.value || classes.value.length === 0) {
+      message.warning('暂无可用标注类别，请先在「类别管理」中添加类别')
+      return
+    }
+    if (!selectedClassId.value) {
+      selectedClassId.value = classes.value[0].id
+      message.info(`已自动选中第一个类别：${classes.value[0].display_name}`)
+    }
+  }
   drawMode.value = mode
   annStore.setDrawingMode(mode)
 }
@@ -692,9 +954,10 @@ function renderCanvas() {
 
     // Draw annotations
     for (const ann of annStore.annotations) {
+      const isSelected = ann.id === selectedAnnotationId.value
       drawBBox(ctx, ann.bbox_x * scale, ann.bbox_y * scale,
                 ann.bbox_width * scale, ann.bbox_height * scale,
-                ann.class_id)
+                ann.class_id, isSelected)
     }
   }
   img.src = getImageUrl(imgId)
@@ -703,19 +966,44 @@ function renderCanvas() {
 function drawBBox(
   ctx: CanvasRenderingContext2D,
   x: number, y: number, w: number, h: number,
-  classId: string
+  classId: string,
+  isSelected = false
 ) {
   const cls = annStore.classMap[classId]
   const color = cls?.color || '#3B82F6'
 
-  ctx.strokeStyle = color
-  ctx.lineWidth = 2
-  ctx.strokeRect(x, y, w, h)
-
+  // 填充色
   ctx.fillStyle = color
   ctx.globalAlpha = 0.25
   ctx.fillRect(x, y, w, h)
   ctx.globalAlpha = 1.0
+
+  // 边框
+  ctx.strokeStyle = color
+  ctx.lineWidth = isSelected ? 3 : 2
+  ctx.strokeRect(x, y, w, h)
+
+  // 选中状态：画虚线边框和控制点
+  if (isSelected) {
+    ctx.strokeStyle = '#fff'
+    ctx.lineWidth = 1
+    ctx.setLineDash([3, 3])
+    ctx.strokeRect(x - 2, y - 2, w + 4, h + 4)
+    ctx.setLineDash([])
+
+    // 控制点
+    const handleSize = 6
+    ctx.fillStyle = '#fff'
+    ctx.strokeStyle = color
+    ctx.lineWidth = 1
+    const corners = [
+      [x, y], [x + w, y], [x, y + h], [x + w, y + h]
+    ]
+    for (const [cx, cy] of corners) {
+      ctx.fillRect(cx - handleSize / 2, cy - handleSize / 2, handleSize, handleSize)
+      ctx.strokeRect(cx - handleSize / 2, cy - handleSize / 2, handleSize, handleSize)
+    }
+  }
 
   const label = cls?.display_name || classId
   ctx.font = 'bold 12px sans-serif'
@@ -728,45 +1016,110 @@ function drawBBox(
 
 function handleCanvasClick(e: MouseEvent) {
   if (drawMode.value !== 'edit') return
-  // Remove bbox on click (find nearest)
+  if (!annotateProjectId.value || !isImageInProject(selectedAnnotateImageId.value)) {
+    message.warning('请先将图片添加到标注项目')
+    return
+  }
+  // 在编辑模式下点击选中/取消选中标注
   const canvas = canvasRef.value
   if (!canvas) return
   const rect = canvas.getBoundingClientRect()
   const cx = (e.clientX - rect.left)
   const cy = (e.clientY - rect.top)
 
+  // 查找点击的标注
   for (const ann of annStore.annotations) {
     const ax = ann.bbox_x * scale
     const ay = ann.bbox_y * scale
     const aw = ann.bbox_width * scale
     const ah = ann.bbox_height * scale
     if (cx >= ax && cx <= ax + aw && cy >= ay && cy <= ay + ah) {
-      removeAnnotation(ann.id)
+      // 点击了标注框，切换选中状态
+      if (selectedAnnotationId.value === ann.id) {
+        selectedAnnotationId.value = null
+      } else {
+        selectedAnnotationId.value = ann.id
+      }
+      renderCanvas()
       return
     }
   }
+  // 点击空白处取消选中
+  selectedAnnotationId.value = null
+  renderCanvas()
 }
 
 function handleCanvasMouseDown(e: MouseEvent) {
-  if (drawMode.value !== 'draw' || !selectedClassId.value) return
   const canvas = canvasRef.value
   if (!canvas) return
   const rect = canvas.getBoundingClientRect()
+  const mouseX = e.clientX - rect.left
+  const mouseY = e.clientY - rect.top
+
+  // 编辑模式下：尝试开始拖动选中的标注
+  if (drawMode.value === 'edit') {
+    // 查找是否点击在选中标注上
+    if (selectedAnnotationId.value) {
+      const selectedAnn = annStore.annotations.find(a => a.id === selectedAnnotationId.value)
+      if (selectedAnn) {
+        const ax = selectedAnn.bbox_x * scale
+        const ay = selectedAnn.bbox_y * scale
+        const aw = selectedAnn.bbox_width * scale
+        const ah = selectedAnn.bbox_height * scale
+        if (mouseX >= ax && mouseX <= ax + aw && mouseY >= ay && mouseY <= ay + ah) {
+          // 开始拖动
+          isDragging = true
+          dragAnnotationId = selectedAnnotationId.value
+          dragOffsetX = mouseX - ax
+          dragOffsetY = mouseY - ay
+          e.preventDefault()
+          return
+        }
+      }
+    }
+    return
+  }
+
+  // 绘制模式
+  if (drawMode.value !== 'draw' || !selectedClassId.value) return
+  if (!annotateProjectId.value || !isImageInProject(selectedAnnotateImageId.value)) {
+    message.warning('请先将图片添加到标注项目')
+    return
+  }
   isDrawing = true
-  drawStartX = e.clientX - rect.left
-  drawStartY = e.clientY - rect.top
+  drawStartX = mouseX
+  drawStartY = mouseY
   e.preventDefault()
 }
 
 function handleCanvasMouseMove(e: MouseEvent) {
-  if (!isDrawing || drawMode.value !== 'draw') return
   const canvas = canvasRef.value
   if (!canvas) return
-  const ctx = canvas.getContext('2d')
-  if (!ctx) return
   const rect = canvas.getBoundingClientRect()
   const curX = e.clientX - rect.left
   const curY = e.clientY - rect.top
+
+  // 拖动模式：移动选中的标注
+  if (isDragging && dragAnnotationId) {
+    const ann = annStore.annotations.find(a => a.id === dragAnnotationId)
+    if (ann) {
+      // 计算新的位置（转换为图片坐标）
+      const newX = (curX - dragOffsetX) / scale
+      const newY = (curY - dragOffsetY) / scale
+
+      // 限制在图片范围内
+      ann.bbox_x = Math.max(0, Math.min(newX, canvas.width / scale - ann.bbox_width))
+      ann.bbox_y = Math.max(0, Math.min(newY, canvas.height / scale - ann.bbox_height))
+
+      renderCanvas()
+    }
+    return
+  }
+
+  // 绘制模式
+  if (!isDrawing || drawMode.value !== 'draw') return
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
 
   // Re-render
   renderCanvas()
@@ -784,10 +1137,27 @@ function handleCanvasMouseMove(e: MouseEvent) {
 }
 
 async function handleCanvasMouseUp(e: MouseEvent) {
+  const canvas = canvasRef.value
+
+  // 拖动模式：结束拖动并保存
+  if (isDragging && dragAnnotationId) {
+    isDragging = false
+    // 保存拖动后的位置
+    const ann = annStore.annotations.find(a => a.id === dragAnnotationId)
+    if (ann) {
+      await annStore.updateAnnotation(ann.id, {
+        bbox_x: ann.bbox_x,
+        bbox_y: ann.bbox_y,
+      })
+    }
+    dragAnnotationId = null
+    renderCanvas()
+    return
+  }
+
+  // 绘制模式
   if (!isDrawing || drawMode.value !== 'draw') return
   isDrawing = false
-
-  const canvas = canvasRef.value
   if (!canvas) return
   const rect = canvas.getBoundingClientRect()
   const endX = e.clientX - rect.left
@@ -806,6 +1176,18 @@ async function handleCanvasMouseUp(e: MouseEvent) {
   const imgW = w / scale
   const imgH = h / scale
 
+  if (!annotateProjectId.value) return
+
+  // Auto-select first class if none is selected; warn if there are no classes
+  if (!selectedClassId.value) {
+    if (!classes.value || classes.value.length === 0) {
+      message.warning('暂无可用标注类别，请先在「类别管理」中添加类别')
+      return
+    }
+    selectedClassId.value = classes.value[0].id
+    message.info(`已自动选中第一个类别：${classes.value[0].display_name}`)
+  }
+
   await annStore.addAnnotation({
     class_id: selectedClassId.value!,
     bbox_x: imgX,
@@ -814,7 +1196,7 @@ async function handleCanvasMouseUp(e: MouseEvent) {
     bbox_height: imgH,
     conf: 1.0,
     is_auto_annotated: false,
-  })
+  }, annotateProjectId.value)
 
   await nextTick()
   renderCanvas()
@@ -827,11 +1209,54 @@ async function removeAnnotation(id: string) {
 }
 
 async function saveAnnotations() {
+  if (!annotateProjectId.value) {
+    message.warning('请先选择标注项目')
+    return
+  }
+  if (!selectedAnnotateImageId.value) {
+    message.warning('请先选择图片')
+    return
+  }
+  if (!isImageInProject(selectedAnnotateImageId.value)) {
+    message.warning('请先将图片添加到标注项目')
+    return
+  }
+  if (!savedImageIds.value.has(annotateProjectId.value)) {
+    savedImageIds.value.set(annotateProjectId.value, new Set())
+  }
+  savedImageIds.value.get(annotateProjectId.value)!.add(selectedAnnotateImageId.value)
   message.success('标注已保存')
 }
 
-function exportYOLO() {
-  window.open('/api/annotations/export/yolo', '_blank')
+async function handleSubmitForReview() {
+  if (!currentProjectId.value) {
+    message.warning('请先选择一个标注项目')
+    return
+  }
+  await doSubmitForReview(currentProjectId.value)
+}
+
+async function handleSubmitForReviewById(projectId: string) {
+  await doSubmitForReview(projectId)
+}
+
+async function doSubmitForReview(projectId: string) {
+  try {
+    await annotationsApi.submitForReview(projectId)
+    message.success('已提交审核')
+    await loadProjects()
+    await loadStats()
+  } catch (error: any) {
+    message.error(error?.response?.data?.detail || '提交审核失败')
+  }
+}
+
+async function exportYOLO() {
+  try {
+    await annotationsApi.exportYOLO()
+  } catch (e) {
+    console.error('Export failed:', e)
+  }
 }
 
 // ── Classes ────────────────────────────────────────────────
@@ -864,6 +1289,24 @@ const reviewActionLoading = ref(false)
 const selectedReview = ref<any | null>(null)
 const reviewFilter = ref<string | null>(null)
 const rejectFeedback = ref('')
+
+// Per-image review state
+interface ReviewImage { id: string; original_filename?: string }
+const reviewImages = ref<ReviewImage[]>([])
+const reviewImageReviews = ref<Record<string, { review_status: string; rejection_reason: string }>>({})
+const reviewImageLoading = ref(false)
+const reviewImageSubmitting = ref<string | null>(null)
+const showSingleRejectModal = ref(false)
+const singleRejectTarget = ref<ReviewImage | null>(null)
+const singleRejectReason = ref('')
+
+// Bulk confirm modal state
+const showBulkConfirm = ref(false)
+const bulkConfirmTitle = ref('')
+const bulkConfirmContent = ref('')
+const bulkConfirmOkText = ref('确认')
+const bulkConfirmDanger = ref(false)
+const bulkConfirmAction = ref<(() => Promise<void>) | null>(null)
 const classForm = reactive({
   name: '',
   display_name: '',
@@ -938,47 +1381,219 @@ async function loadReviewQueue() {
   try {
     const res: any = await annotationsApi.getReviewQueue({})
     reviewQueue.value = res.items || []
-    reviewStats.value = {
-      pending_review: reviewQueue.value.filter((p: any) => p.status === 'in_review').length,
-      needs_revision: reviewQueue.value.filter((p: any) => p.status === 'rejected').length,
-      completed: 0,
-      in_progress: 0,
-    }
     const statsRes: any = await annotationsApi.getReviewSummary()
-    reviewStats.value.completed = statsRes.completed || 0
-    reviewStats.value.in_progress = statsRes.in_progress || 0
+    reviewStats.value = {
+      pending_review: statsRes.pending_review || 0,
+      needs_revision: statsRes.needs_revision || 0,
+      completed: statsRes.completed || 0,
+      in_progress: statsRes.in_progress || 0,
+    }
   } catch (e) { console.error(e) }
   finally { reviewLoading.value = false }
 }
 
-function selectReviewProject(project: any) {
+function getImageReviewStatus(imageId: string): string | null {
+  return reviewImageReviews.value[imageId]?.review_status || null
+}
+
+function getImageReviewReason(imageId: string): string {
+  const r = reviewImageReviews.value[imageId]
+  if (!r) return '未审核'
+  if (r.review_status === 'request_changes' && r.rejection_reason) {
+    return `退回原因：${r.rejection_reason}`
+  }
+  if (r.review_status === 'approve') return '已通过'
+  if (r.review_status === 'request_changes') return '已退回'
+  return '未审核'
+}
+
+async function selectReviewProject(project: any) {
   selectedReview.value = project
   rejectFeedback.value = project.review_feedback || ''
+  reviewImages.value = []
+  reviewImageReviews.value = {}
+  await loadReviewImages(project.id)
+  await refreshSelectedReview(project.id)
 }
 
-async function handleApproveProject(project: any) {
-  reviewActionLoading.value = true
+async function loadReviewImages(projectId: string) {
+  reviewImageLoading.value = true
   try {
-    await annotationsApi.approveProject(project.id)
-    message.success('项目已通过审核')
-    selectedReview.value = null
-    await loadReviewQueue()
-  } catch { message.error('操作失败') }
-  finally { reviewActionLoading.value = false }
+    // Get images linked to the project via /projects/{id}/images (returns {image_id, added_at})
+    // Use store.imagesData which is already loaded for the annotate tab
+    const res: any = await annotationsApi.getProjectImages(projectId)
+    const items = (res?.items || []) as { image_id: string; added_at?: string }[]
+    // Try to enrich with original_filename from the global image list (ImageManager)
+    const allImages: any[] = (window as any).__allImages || []
+    reviewImages.value = items.map(it => {
+      const meta = allImages.find((im: any) => im.id === it.image_id)
+      return {
+        id: it.image_id,
+        original_filename: meta?.original_filename || meta?.filename || it.image_id,
+      }
+    })
+  } catch (e) { console.error(e) }
+  finally { reviewImageLoading.value = false }
 }
 
-async function handleRejectProject(project: any) {
+async function refreshSelectedReview(projectId: string) {
+  try {
+    const res: any = await annotationsApi.getProjectImageReviews(projectId)
+    reviewImageReviews.value = res.reviews || {}
+  } catch (e) { console.error(e) }
+  try {
+    const fresh: any = await annotationsApi.getProject(projectId)
+    selectedReview.value = fresh
+  } catch (e) { console.error(e) }
+}
+
+function closeReviewDetail() {
+  selectedReview.value = null
+  reviewImages.value = []
+  reviewImageReviews.value = {}
+}
+
+async function confirmSingleApprove(item: ReviewImage) {
+  showBulkConfirm.value = true
+  bulkConfirmTitle.value = '通过该图片'
+  bulkConfirmContent.value = `确定要将图片「${item.original_filename || item.id}」审核通过吗？`
+  bulkConfirmOkText.value = '通过'
+  bulkConfirmDanger.value = false
+  bulkConfirmAction.value = async () => {
+    await doSingleApprove(item)
+  }
+}
+
+async function doSingleApprove(item: ReviewImage) {
+  if (!selectedReview.value) return
+  reviewImageSubmitting.value = item.id + ':approve'
+  try {
+    await annotationsApi.reviewProjectImage(selectedReview.value.id, item.id, { action: 'approve' })
+    message.success('已通过')
+    await refreshSelectedReview(selectedReview.value.id)
+    await loadReviewQueue()
+  } catch (e: any) {
+    message.error(e?.response?.data?.detail || '操作失败')
+  } finally {
+    reviewImageSubmitting.value = null
+  }
+}
+
+function openSingleRejectModal(item: ReviewImage) {
+  singleRejectTarget.value = item
+  singleRejectReason.value = ''
+  showSingleRejectModal.value = true
+}
+
+async function handleSingleRejectConfirm() {
+  if (!selectedReview.value || !singleRejectTarget.value) {
+    showSingleRejectModal.value = false
+    return
+  }
+  if (!singleRejectReason.value.trim()) {
+    message.warning('请填写退回原因')
+    return
+  }
+  const item = singleRejectTarget.value
+  showSingleRejectModal.value = false
+  reviewImageSubmitting.value = item.id + ':reject'
+  try {
+    await annotationsApi.reviewProjectImage(selectedReview.value.id, item.id, {
+      action: 'request_changes',
+      reason: singleRejectReason.value,
+    })
+    message.success('已退回')
+    await refreshSelectedReview(selectedReview.value.id)
+    await loadReviewQueue()
+  } catch (e: any) {
+    message.error(e?.response?.data?.detail || '操作失败')
+  } finally {
+    reviewImageSubmitting.value = null
+    singleRejectTarget.value = null
+  }
+}
+
+function confirmBulkApprove() {
+  if (!selectedReview.value) return
+  showBulkConfirm.value = true
+  bulkConfirmTitle.value = '一键通过'
+  bulkConfirmContent.value = `确定要将「${selectedReview.value.name}」中所有 ${reviewImages.value.length} 张图片全部通过审核吗？通过后项目状态将变为「已完成」。`
+  bulkConfirmOkText.value = '一键通过'
+  bulkConfirmDanger.value = false
+  bulkConfirmAction.value = doBulkApprove
+}
+
+async function doBulkApprove() {
+  if (!selectedReview.value) return
   reviewActionLoading.value = true
   try {
-    await annotationsApi.rejectProject(project.id, { feedback: rejectFeedback.value })
-    message.success('项目已退回')
-    selectedReview.value = null
+    await annotationsApi.bulkApproveProject(selectedReview.value.id)
+    message.success('已全部通过，项目已完成')
     await loadReviewQueue()
-  } catch { message.error('操作失败') }
-  finally { reviewActionLoading.value = false }
+    await refreshSelectedReview(selectedReview.value.id)
+  } catch (e: any) {
+    message.error(e?.response?.data?.detail || '操作失败')
+  } finally {
+    reviewActionLoading.value = false
+  }
+}
+
+function confirmBulkReject() {
+  if (!selectedReview.value) return
+  if (!rejectFeedback.value.trim()) {
+    message.warning('请填写退回原因')
+    return
+  }
+  showBulkConfirm.value = true
+  bulkConfirmTitle.value = '一键退回'
+  bulkConfirmContent.value = `确定要将「${selectedReview.value.name}」中所有 ${reviewImages.value.length} 张图片全部退回吗？项目状态将变为「已退回」。`
+  bulkConfirmOkText.value = '一键退回'
+  bulkConfirmDanger.value = true
+  bulkConfirmAction.value = doBulkReject
+}
+
+async function doBulkReject() {
+  if (!selectedReview.value) return
+  reviewActionLoading.value = true
+  try {
+    await annotationsApi.bulkRejectProject(selectedReview.value.id, { reason: rejectFeedback.value })
+    message.success('已全部退回')
+    await loadReviewQueue()
+    await refreshSelectedReview(selectedReview.value.id)
+  } catch (e: any) {
+    message.error(e?.response?.data?.detail || '操作失败')
+  } finally {
+    reviewActionLoading.value = false
+  }
+}
+
+async function handleBulkConfirm() {
+  const action = bulkConfirmAction.value
+  bulkConfirmAction.value = null
+  if (action) await action()
+  showBulkConfirm.value = false
 }
 
 // ── Lifecycle ───────────────────────────────────────────────
+
+function handleKeyDown(e: KeyboardEvent) {
+  // Delete 键删除选中的标注
+  if (e.key === 'Delete' || e.key === 'Backspace') {
+    if (drawMode.value === 'edit' && selectedAnnotationId.value) {
+      e.preventDefault()
+      removeAnnotation(selectedAnnotationId.value)
+      selectedAnnotationId.value = null
+    }
+  }
+  // Escape 取消选中
+  if (e.key === 'Escape') {
+    if (selectedAnnotationId.value) {
+      selectedAnnotationId.value = null
+      renderCanvas()
+    }
+  }
+}
+
 onMounted(async () => {
   await Promise.all([
     annStore.fetchClasses(),
@@ -987,10 +1602,14 @@ onMounted(async () => {
     loadAnnotateImages(),
     loadReviewQueue(),
   ])
+  // 添加键盘事件监听
+  window.addEventListener('keydown', handleKeyDown)
 })
 
 onUnmounted(() => {
   annStore.reset()
+  // 移除键盘事件监听
+  window.removeEventListener('keydown', handleKeyDown)
 })
 </script>
 
@@ -1036,6 +1655,7 @@ onUnmounted(() => {
   cursor: pointer;
   border-radius: 4px;
   transition: background 0.2s;
+  position: relative;
 }
 
 .image-item:hover {
@@ -1070,6 +1690,18 @@ onUnmounted(() => {
 .img-meta {
   font-size: 11px;
   color: #999;
+}
+
+.remove-from-project-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.image-item:hover .remove-from-project-btn {
+  opacity: 1;
 }
 
 .canvas-container {

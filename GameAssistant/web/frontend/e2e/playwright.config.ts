@@ -79,8 +79,8 @@ export default defineConfig({
         deviceScaleFactor: 2.625,
         isMobile: true,
         hasTouch: true,
-        // 移动端使用独立的 storageState 文件
-        storageState: path.join(__dirname, '.auth', 'mobile-chrome.json'),
+        // Mobile Chrome 测试不使用存储的认证状态（每次测试都是独立的）
+        // storageState 由 global-setup 统一管理，不需要每个项目单独设置
       },
       // 移动端只运行移动端兼容测试
       testMatch: [

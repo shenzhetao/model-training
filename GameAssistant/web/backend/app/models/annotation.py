@@ -35,6 +35,7 @@ class Annotation(Base):
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     image_id = Column(String(36), nullable=False, index=True)
+    project_id = Column(String(36), nullable=False, index=True)
     class_id = Column(String(36), nullable=False, index=True)
     bbox_x = Column(Float, nullable=False)
     bbox_y = Column(Float, nullable=False)
@@ -53,6 +54,7 @@ class Annotation(Base):
     __table_args__ = (
         Index("idx_annotations_image_id", "image_id"),
         Index("idx_annotations_class_id", "class_id"),
+        Index("idx_annotations_project_id", "project_id"),
         Index("idx_annotations_image_class", "image_id", "class_id"),
     )
 

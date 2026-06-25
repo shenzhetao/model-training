@@ -84,10 +84,12 @@ class TemplateUploadHelper:
         cls_dir = os.path.join(settings.TEMPLATE_DIR, class_name)
         os.makedirs(cls_dir, exist_ok=True)
         file_path = os.path.join(cls_dir, new_name)
-        full = os.path.join(settings.TEMPLATE_DIR, file_path)
+        full = file_path
 
         img.save(full)
-        return file_path, w, h
+        # Store relative path under TEMPLATE_DIR (just class_name/filename)
+        rel_path = os.path.join(class_name, new_name)
+        return rel_path, w, h
 
 
 template_class_crud = CRUDTemplateClass(TemplateClass)

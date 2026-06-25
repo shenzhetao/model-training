@@ -106,6 +106,20 @@ class CRUDDatasetVersion(CRUDBase[DatasetVersion]):
         if not to_add:
             return 0
 
+        # Collect class_ids from annotations of added images
+        ann_result = await db.execute(
+            select(Annotation.class_id).where(Annotation.image_id.in_(to_add))
+        )
+        existing_class_ids = set()
+        if image_ids:
+            # Get existing class_ids from version
+            version = await self.get(db, version_id)
+            if version and version.class_ids:
+                existing_class_ids = set(version.class_ids)
+
+        new_class_ids = set(r[0] for r in ann_result.all() if r[0])
+        all_class_ids = list(existing_class_ids | new_class_ids)
+
         records = [
             DatasetVersionImage(
                 dataset_version_id=version_id,
@@ -119,7 +133,10 @@ class CRUDDatasetVersion(CRUDBase[DatasetVersion]):
         await db.execute(
             update(DatasetVersion)
             .where(DatasetVersion.id == version_id)
-            .values(image_count=DatasetVersion.image_count + len(to_add))
+            .values(
+                image_count=DatasetVersion.image_count + len(to_add),
+                class_ids=all_class_ids if all_class_ids else DatasetVersion.class_ids,
+            )
         )
         await db.flush()
         return len(to_add)
@@ -156,14 +173,16 @@ class CRUDDatasetVersion(CRUDBase[DatasetVersion]):
             annotations.setdefault(ann.image_id, []).append(ann)
 
         class_ids: list = version.class_ids or []
-        class_map: dict[str, int] = {}
+        class_id_to_yolo: dict[str, int] = {}
+        yolo_id_to_name: dict[int, str] = {}
         for cid in class_ids:
             cls_r = await db.execute(
                 select(AnnotationClass).where(AnnotationClass.id == cid)
             )
             cls = cls_r.scalar_one_or_none()
             if cls:
-                class_map[cls.id] = cls.yolo_class_id
+                class_id_to_yolo[cls.id] = cls.yolo_class_id
+                yolo_id_to_name[cls.yolo_class_id] = cls.name
 
         zip_buf = io.BytesIO()
         splits = {"train": [], "val": [], "test": []}
@@ -179,8 +198,8 @@ class CRUDDatasetVersion(CRUDBase[DatasetVersion]):
             if img_anns:
                 lines = []
                 for ann in img_anns:
-                    if ann.class_id in class_map:
-                        yolo_id = class_map[ann.class_id]
+                    if ann.class_id in class_id_to_yolo:
+                        yolo_id = class_id_to_yolo[ann.class_id]
                         cx = (ann.bbox_x + ann.bbox_width / 2) / img.width
                         cy = (ann.bbox_y + ann.bbox_height / 2) / img.height
                         w = ann.bbox_width / img.width
@@ -202,9 +221,14 @@ class CRUDDatasetVersion(CRUDBase[DatasetVersion]):
                     if label_content:
                         zf.writestr(f"{split_name}/labels/{txt_name}", label_content)
 
-            names_content = "\n".join(
-                f"  - class_{i}" for i in range(len(class_map))
-            )
+            # Build names list using actual class names
+            max_yolo_id = max(yolo_id_to_name.keys(), default=-1)
+            if max_yolo_id >= 0:
+                names_list = [yolo_id_to_name.get(i, f"class_{i}") for i in range(max_yolo_id + 1)]
+            else:
+                names_list = [f"class_{i}" for i in range(len(class_id_to_yolo))]
+
+            names_content = "\n".join(f"  - {name}" for name in names_list)
             yaml_content = f"""path: .
 train: train/images
 val: val/images

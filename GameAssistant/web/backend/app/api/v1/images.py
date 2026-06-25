@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query, BackgroundTasks
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.responses import StreamingResponse, JSONResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from PIL import Image as PILImage
 
@@ -305,6 +305,36 @@ async def upload_batch_images(
     )
 
 
+@router.get("", response_model=ImageListResponse, include_in_schema=False)
+async def list_images_no_slash(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    source: Optional[str] = Query(default=None, description="Filter by source: upload/adb/video"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get paginated list of images (no trailing slash)."""
+    skip = (page - 1) * page_size
+
+    images, total = await image_crud.get_multi_paginated(
+        db,
+        skip=skip,
+        limit=page_size,
+        source=source,
+        uploaded_by=None,
+    )
+
+    total_pages = (total + page_size - 1) // page_size if total > 0 else 1
+
+    return ImageListResponse(
+        items=images,
+        total=total,
+        page=page,
+        page_size=page_size,
+        total_pages=total_pages,
+    )
+
+
 @router.get("/", response_model=ImageListResponse)
 async def list_images(
     page: int = Query(default=1, ge=1),
@@ -321,7 +351,7 @@ async def list_images(
         skip=skip,
         limit=page_size,
         source=source,
-        uploaded_by=None,  # Show all users' images for admin
+        uploaded_by=None,
     )
 
     total_pages = (total + page_size - 1) // page_size if total > 0 else 1
@@ -356,7 +386,6 @@ async def serve_image(
     image_id: str,
     size: int = Query(default=None, ge=16, le=1024, description="Resize image to this max dimension"),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
 ):
     """Stream image file for viewing, optionally resized."""
     image = await image_crud.get(db, image_id)
@@ -470,7 +499,7 @@ async def delete_single_image(
     )
 
 
-@router.delete("/", response_model=ImageDeleteResponse)
+@router.delete("", response_model=ImageDeleteResponse)
 async def delete_batch_images(
     image_ids: str = Query(..., description="Comma-separated list of image IDs"),
     db: AsyncSession = Depends(get_db),

@@ -87,6 +87,41 @@ package-lock.json
 .npm
 
 # ============================================================
+# GameAssistant Web App - Runtime & Data
+# ============================================================
+# Environment configs (contain credentials)
+GameAssistant/web/.env
+GameAssistant/web/backend/.env
+
+# User-uploaded data (images, videos, etc.)
+GameAssistant/web/backend/uploads/
+# Model artifacts (dataset zips, trained weights)
+GameAssistant/web/backend/models/
+# Runtime-generated template caches
+GameAssistant/web/backend/templates/
+# Backend log files
+GameAssistant/web/backend/*.txt
+
+# ============================================================
+# Frontend Build Artifacts
+# ============================================================
+GameAssistant/web/frontend/dist/
+GameAssistant/web/frontend/playwright-report/
+GameAssistant/web/frontend/test-results/
+GameAssistant/web/frontend/components.d.ts
+GameAssistant/web/frontend/vite.config.d.ts
+GameAssistant/web/frontend/vite.config.ts.bak
+*.tsbuildinfo
+.DS_Store
+
+# Frontend E2E test artifacts
+GameAssistant/web/frontend/e2e/playwright-report/
+GameAssistant/web/frontend/e2e/test-results/
+GameAssistant/web/frontend/e2e/.auth/
+GameAssistant/web/frontend/e2e/login-diagnostic.png
+GameAssistant/web/frontend/e2e/login-page-failed.png
+
+# ============================================================
 # Misc
 # ============================================================
 .commit_msg.txt

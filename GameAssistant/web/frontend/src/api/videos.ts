@@ -31,7 +31,7 @@ export interface VideoListResponse {
 }
 
 export type ExtractionStrategy = 'interval' | 'count' | 'scene_change'
-export type ExtractionStatus = 'pending' | 'running' | 'completed' | 'failed'
+export type ExtractionStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
 
 export interface ExtractionTaskResponse {
   id: string
@@ -115,7 +115,7 @@ export const videosApi = {
     if (params.page_size) queryParams.set('page_size', String(params.page_size))
 
     const query = queryParams.toString()
-    return request.get(`/videos${query ? `?${query}` : ''}`)
+    return request.get(`/videos/${query ? `?${query}` : ''}`)
   },
 
   /**
@@ -169,6 +169,13 @@ export const videosApi = {
 
     const query = queryParams.toString()
     return request.get(`/videos/tasks/list${query ? `?${query}` : ''}`)
+  },
+
+  /**
+   * Cancel an extraction task
+   */
+  async cancelExtractionTask(taskId: string): Promise<{ success: boolean; message: string }> {
+    return request.delete(`/videos/tasks/${taskId}`)
   },
 }
 

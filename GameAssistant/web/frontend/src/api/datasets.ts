@@ -97,6 +97,10 @@ export const datasetsApi = {
   getGenerateYoloUrl(datasetId: string, versionId: string): string {
     return `/api/datasets/${datasetId}/versions/${versionId}/generate-yolo`
   },
+
+  async saveAugmentationConfig(datasetId: string, versionId: string, config: Record<string, unknown>): Promise<void> {
+    await request.post(`/datasets/${datasetId}/versions/${versionId}/augmentation`, config)
+  },
 }
 
 export default datasetsApi

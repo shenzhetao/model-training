@@ -2,7 +2,7 @@ from fastapi import APIRouter
 
 from app.api.v1 import users, images, video, adb, annotations, templates, datasets, models, training, inference
 
-api_router = APIRouter()
+api_router = APIRouter(redirect_slashes=False)
 
 # Include all v1 routers
 api_router.include_router(users.router, prefix="/users", tags=["users"])

@@ -55,21 +55,49 @@ export const useDatasetsStore = defineStore('datasets', () => {
   async function generateYolo(datasetId: string, versionId: string) {
     generating.value = true
     try {
-      const resp = await request.post(`/datasets/${datasetId}/versions/${versionId}/generate-yolo`, null, {
-        responseType: 'blob',
-      })
-      const blob = new Blob([resp], { type: 'application/zip' })
+      // The interceptor unwraps blob responses to { data, headers, status }
+      // and rejects with a real Error on HTTP/JSON-error responses.
+      const resp = await request.post(
+        `/datasets/${datasetId}/versions/${versionId}/generate-yolo`,
+        null,
+        { responseType: 'blob' as const }
+      ) as unknown as { data: Blob; headers: Record<string, string>; status: number }
+
+      const blob = resp.data
+      const filename = parseFilename(resp.headers) ?? `yolo_dataset_${versionId.slice(0, 8)}.zip`
+
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `yolo_dataset_${versionId.slice(0, 8)}.zip`
+      a.download = filename
+      document.body.appendChild(a)
       a.click()
+      a.remove()
       URL.revokeObjectURL(url)
+      return blob
     } catch (e) {
       console.error(e)
+      throw e
     } finally {
       generating.value = false
     }
+  }
+
+  function parseFilename(headers: Record<string, string>): string | null {
+    const cd = headers['content-disposition'] || headers['Content-Disposition']
+    if (!cd) return null
+    // RFC 5987: filename*=UTF-8''<percent-encoded>
+    const utf8 = cd.match(/filename\*\s*=\s*[^']*''([^;]+)/i)
+    if (utf8) {
+      try {
+        return decodeURIComponent(utf8[1].trim().replace(/^"|"$/g, ''))
+      } catch {
+        // fall through
+      }
+    }
+    const ascii = cd.match(/filename\s*=\s*"?([^";]+)"?/i)
+    if (ascii) return ascii[1].trim()
+    return null
   }
 
   function reset() {

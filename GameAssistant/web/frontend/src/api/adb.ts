@@ -46,6 +46,7 @@ export interface InferenceParams {
   device_id?: string
   mode?: 'hybrid' | 'template' | 'yolo'
   yolo_conf?: number
+  template_conf?: number
 }
 
 export const adbApi = {
@@ -68,6 +69,7 @@ export const adbApi = {
     if (params.device_id) query.set('device_id', params.device_id)
     if (params.mode) query.set('mode', params.mode)
     if (params.yolo_conf !== undefined) query.set('yolo_conf', String(params.yolo_conf))
+    if (params.template_conf !== undefined) query.set('template_conf', String(params.template_conf))
     const q = query.toString()
     return request.get(`/adb/inference${q ? `?${q}` : ''}`)
   },

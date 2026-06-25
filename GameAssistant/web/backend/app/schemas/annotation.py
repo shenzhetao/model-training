@@ -42,6 +42,7 @@ class ClassResponse(ClassBase):
 
 class AnnotationBase(BaseModel):
     image_id: str
+    project_id: str
     class_id: str
     bbox_x: float
     bbox_y: float
@@ -132,7 +133,6 @@ class ProjectCreate(ProjectBase):
 class ProjectUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
-    status: Optional[str] = None
     class_ids: Optional[list[str]] = None
     assigned_to: Optional[str] = None
 

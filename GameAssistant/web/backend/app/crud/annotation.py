@@ -1,5 +1,6 @@
 """CRUD operations for Annotation, AnnotationClass, and AnnotationProject."""
 import io
+import os
 import zipfile
 from collections import defaultdict
 from datetime import datetime
@@ -14,6 +15,7 @@ from app.models.annotation import (
 )
 from app.models.image import Image
 from app.crud.base import CRUDBase
+from app.config import settings
 
 
 class CRUDAnnotationClass(CRUDBase[AnnotationClass]):
@@ -38,12 +40,13 @@ class CRUDAnnotationClass(CRUDBase[AnnotationClass]):
 
 class CRUDAnnotation(CRUDBase[Annotation]):
     async def get_by_image(
-        self, db: AsyncSession, image_id: str
+        self, db: AsyncSession, image_id: str, project_id: Optional[str] = None
     ) -> list[Annotation]:
+        query = select(Annotation).where(Annotation.image_id == image_id)
+        if project_id:
+            query = query.where(Annotation.project_id == project_id)
         result = await db.execute(
-            select(Annotation)
-            .where(Annotation.image_id == image_id)
-            .order_by(Annotation.annotated_at.desc())
+            query.order_by(Annotation.annotated_at.desc())
         )
         return list(result.scalars().all())
 
@@ -71,6 +74,7 @@ class CRUDAnnotation(CRUDBase[Annotation]):
             select(Annotation).where(
                 and_(
                     Annotation.image_id == obj_in["image_id"],
+                    Annotation.project_id == obj_in["project_id"],
                     Annotation.class_id == obj_in["class_id"],
                     Annotation.bbox_x == obj_in["bbox_x"],
                     Annotation.bbox_y == obj_in["bbox_y"],
@@ -100,21 +104,17 @@ class CRUDAnnotation(CRUDBase[Annotation]):
     async def count_by_project(
         self, db: AsyncSession, project_id: str
     ) -> tuple[int, int]:
-        """Count (total_annotations, auto_annotations) for a project."""
-        image_ids_sub = (
-            select(AnnotationProjectImage.image_id)
-            .where(AnnotationProjectImage.annotation_project_id == project_id)
-        )
+        """Count (total_annotations, auto_annotations) for a project, filtered by annotation.project_id."""
         total_result = await db.execute(
             select(func.count(Annotation.id))
-            .where(Annotation.image_id.in_(image_ids_sub))
+            .where(Annotation.project_id == project_id)
         )
         total = total_result.scalar() or 0
         auto_result = await db.execute(
             select(func.count(Annotation.id))
             .where(
                 and_(
-                    Annotation.image_id.in_(image_ids_sub),
+                    Annotation.project_id == project_id,
                     Annotation.is_auto_annotated == True,
                 )
             )
@@ -129,6 +129,12 @@ class CRUDAnnotation(CRUDBase[Annotation]):
         project_id: Optional[str] = None,
     ) -> bytes:
         """Export annotations as a ZIP containing YOLO TXT files and images."""
+        if not image_ids:
+            zip_buffer = io.BytesIO()
+            with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED):
+                pass
+            return zip_buffer.getvalue()
+
         class_map: dict[str, int] = {}
         classes_result = await db.execute(select(AnnotationClass))
         for cls in classes_result.scalars().all():
@@ -153,6 +159,10 @@ class CRUDAnnotation(CRUDBase[Annotation]):
                 if not img_anns:
                     continue
 
+                # Use original_filename for the .txt so YOLO can match by name
+                base_name = os.path.splitext(img.original_filename)[0]
+                txt_name = f"{base_name}.txt"
+
                 lines = []
                 for ann in img_anns:
                     if ann.class_id in class_map:
@@ -166,8 +176,15 @@ class CRUDAnnotation(CRUDBase[Annotation]):
                         )
 
                 if lines:
-                    txt_name = f"{img.filename.rsplit('.', 1)[0]}.txt"
                     zf.writestr(txt_name, "\n".join(lines) + "\n")
+
+                # Read and add the actual image file
+                img_ext = os.path.splitext(img.original_filename)[1]
+                zip_img_name = f"images/{base_name}{img_ext}"
+                full_path = os.path.join(settings.UPLOAD_DIR, img.file_path)
+                if os.path.exists(full_path):
+                    with open(full_path, "rb") as f:
+                        zf.writestr(zip_img_name, f.read())
 
         return zip_buffer.getvalue()
 
@@ -257,14 +274,21 @@ class CRUDAnnotationProject(CRUDBase[AnnotationProject]):
 
     async def get_project_images(
         self, db: AsyncSession, project_id: str, skip: int = 0, limit: int = 100
-    ) -> list[str]:
+    ) -> tuple[list[AnnotationProjectImage], int]:
+        count_result = await db.execute(
+            select(func.count(AnnotationProjectImage.id))
+            .where(AnnotationProjectImage.annotation_project_id == project_id)
+        )
+        total = count_result.scalar() or 0
+
         result = await db.execute(
-            select(AnnotationProjectImage.image_id)
+            select(AnnotationProjectImage)
             .where(AnnotationProjectImage.annotation_project_id == project_id)
             .offset(skip)
             .limit(limit)
         )
-        return [r[0] for r in result.all()]
+        items = result.scalars().all()
+        return list(items), total
 
     async def get_project_image_ids(
         self, db: AsyncSession, project_id: str

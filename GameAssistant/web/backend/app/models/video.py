@@ -38,7 +38,7 @@ class VideoExtractionTask(Base):
     interval_seconds = Column(Float, nullable=True)
     frame_count = Column(Integer, nullable=True)
     scene_threshold = Column(Float, nullable=True)
-    status = Column(String(32), nullable=False, default="pending")  # pending/running/completed/failed
+    status = Column(String(32), nullable=False, default="pending")  # pending/running/completed/failed/cancelled
     total_frames = Column(Integer, nullable=True)
     extracted_frames = Column(Integer, nullable=True, default=0)
     started_at = Column(DateTime, nullable=True)

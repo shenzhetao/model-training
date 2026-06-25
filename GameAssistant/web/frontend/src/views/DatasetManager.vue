@@ -524,7 +524,7 @@ async function manageVersionImages(version: DatasetVersion) {
 async function loadAvailableImages() {
   try {
     const resp = await imagesApi.getList({
-      page_size: 200,
+      page_size: 100,
       source: filterSource.value as 'upload' | 'adb' | 'video' | undefined,
     })
     availableImages.value = resp.items
@@ -572,13 +572,29 @@ async function generateYolo(version: DatasetVersion) {
 }
 
 async function handleApplyAugment() {
+  if (!selectedDatasetId.value || !selectedVersionId.value) {
+    message.warning('请先选择一个版本')
+    return
+  }
   augmentLoading.value = true
   try {
-    await new Promise(r => setTimeout(r, 1000))
+    const config = {
+      strategies: augmentConfig.strategies,
+      rotation: augmentConfig.rotation,
+      scale: augmentConfig.scale,
+      brightness: augmentConfig.brightness,
+      contrast: augmentConfig.contrast,
+      noise: augmentConfig.noise,
+      blur: augmentConfig.blur,
+    }
+    await dsStore.saveAugmentationConfig(selectedDatasetId.value, selectedVersionId.value, config)
     message.success('数据增强配置已保存')
     showAugmentModal.value = false
-  } catch { message.error('保存失败') }
-  finally { augmentLoading.value = false }
+  } catch (e: any) {
+    message.error(e?.response?.data?.detail || '保存失败')
+  } finally {
+    augmentLoading.value = false
+  }
 }
 
 onMounted(async () => {

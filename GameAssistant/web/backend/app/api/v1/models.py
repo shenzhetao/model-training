@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.user import User
 from app.security import get_current_user
+from app.models.model import Model
 from app.schemas.model import ModelCreate, ModelUpdate, ModelResponse, ModelStatsResponse
 from app.crud.model import model_crud, _save_model_file
 
@@ -36,12 +37,12 @@ async def list_models(
 @router.post("/", response_model=ModelResponse)
 async def upload_model(
     file: UploadFile = File(...),
-    name: str = Query(..., description="Model display name"),
-    architecture: str = Query("yolov8n", description="Model architecture"),
-    dataset_version_id: str = Query(None),
-    class_ids: str = Query("[]", description="JSON array of class IDs"),
-    yolo_class_names: str = Query("[]", description="JSON array of class names"),
-    description: str = Query(""),
+    name: str = File(..., description="Model display name"),
+    architecture: str = File("yolov8n", description="Model architecture"),
+    dataset_version_id: str = File(None),
+    class_ids: str = File("[]", description="JSON array of class IDs"),
+    yolo_class_names: str = File("[]", description="JSON array of class names"),
+    description: str = File(""),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -86,6 +87,34 @@ async def upload_model(
     obj = await model_crud.create(db, data)
     await db.commit()
     return obj
+
+
+@router.get("/stats/overview", response_model=ModelStatsResponse)
+async def get_model_stats(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get model statistics."""
+    from sqlalchemy import select, func
+
+    result = await db.execute(
+        select(Model).where(Model.is_deleted == False)
+    )
+    models = list(result.scalars().all())
+    total = len(models)
+    active = sum(1 for m in models if m.is_active)
+    total_size_mb = sum(m.file_size for m in models) / (1024 * 1024)
+
+    by_arch: dict[str, int] = {}
+    for m in models:
+        by_arch[m.architecture] = by_arch.get(m.architecture, 0) + 1
+
+    return ModelStatsResponse(
+        total_models=total,
+        active_models=active,
+        total_size_mb=round(total_size_mb, 2),
+        by_architecture=by_arch,
+    )
 
 
 @router.get("/{model_id}", response_model=ModelResponse)
@@ -173,29 +202,3 @@ async def download_model(
     )
 
 
-@router.get("/stats/overview", response_model=ModelStatsResponse)
-async def get_model_stats(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """Get model statistics."""
-    from sqlalchemy import select, func
-
-    result = await db.execute(
-        select(Model).where(Model.is_deleted == False)
-    )
-    models = list(result.scalars().all())
-    total = len(models)
-    active = sum(1 for m in models if m.is_active)
-    total_size_mb = sum(m.file_size for m in models) / (1024 * 1024)
-
-    by_arch: dict[str, int] = {}
-    for m in models:
-        by_arch[m.architecture] = by_arch.get(m.architecture, 0) + 1
-
-    return ModelStatsResponse(
-        total_models=total,
-        active_models=active,
-        total_size_mb=round(total_size_mb, 2),
-        by_architecture=by_arch,
-    )

@@ -15,7 +15,8 @@ export const useADBDeviceStore = defineStore('adb', () => {
   const inferenceError = ref<string>('')
   const detections = ref<DetectionItem[]>([])
   const inferenceMode = ref<InferenceMode>('hybrid')
-  const yoloConf = ref(0.4)
+  const yoloConf = ref(0.25)
+  const templateConf = ref(0.85)
   const autoRefresh = ref(false)
   let refreshInterval: ReturnType<typeof setInterval> | null = null
 
@@ -74,6 +75,7 @@ export const useADBDeviceStore = defineStore('adb', () => {
         device_id: params.device_id || device.value?.device_id,
         mode: params.mode || inferenceMode.value,
         yolo_conf: params.yolo_conf ?? yoloConf.value,
+        template_conf: params.template_conf ?? templateConf.value,
       })
       detections.value = resp.detections || []
     } catch (error: any) {
@@ -133,6 +135,7 @@ export const useADBDeviceStore = defineStore('adb', () => {
     detections,
     inferenceMode,
     yoloConf,
+    templateConf,
     autoRefresh,
     checkStatus,
     loadDevices,

@@ -39,7 +39,8 @@ class DatasetVersionBase(BaseModel):
 
 
 class DatasetVersionCreate(DatasetVersionBase):
-    dataset_id: str
+    # dataset_id is taken from URL path, not request body
+    pass
 
 
 class DatasetVersionUpdate(BaseModel):

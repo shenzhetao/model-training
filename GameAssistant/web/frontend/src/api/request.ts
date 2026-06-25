@@ -58,7 +58,7 @@ api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     const authStore = useAuthStore()
     if (authStore.token) {
-      config.headers.Authorization = `Bearer ${authStore.token}`
+      config.headers['Authorization'] = `Bearer ${authStore.token}`
     }
     return config
   },
@@ -72,9 +72,32 @@ api.interceptors.response.use(
   async (response: AxiosResponse) => {
     const config = response.config
 
-    // For blob responses, return the raw response object so callers can access response.data
+    // For blob responses, return { data, headers, status } so callers
+    // can read the Blob and also access headers (e.g. Content-Disposition).
+    // Surface HTTP errors as a real Error so callers don't mistake a
+    // JSON error payload for the binary payload.
     if (config.responseType === 'blob') {
-      return response
+      const status = response.status
+      const blob = response.data as Blob | undefined
+      const isJson = blob && blob.type && blob.type.includes('application/json')
+      if (status >= 400 || isJson) {
+        let message = `请求失败 (${status})`
+        if (isJson && blob) {
+          try {
+            const text = await (blob as Blob).text()
+            const parsed = JSON.parse(text)
+            if (parsed?.detail) message = String(parsed.detail)
+          } catch {
+            // ignore parse errors
+          }
+        }
+        return Promise.reject(new Error(message))
+      }
+      return {
+        data: response.data as Blob,
+        headers: response.headers as Record<string, string>,
+        status,
+      }
     }
 
     // Cache GET requests (not with skipCache flag)

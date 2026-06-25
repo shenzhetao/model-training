@@ -78,6 +78,8 @@ class TemplateTestRequest(BaseModel):
     image_url: Optional[str] = None
     template_ids: list[str] = []
     threshold: float = 0.8
+    multi_match: bool = False
+    method: str = "tm_ccoeff_normed"
 
 
 class TemplateTestResult(BaseModel):

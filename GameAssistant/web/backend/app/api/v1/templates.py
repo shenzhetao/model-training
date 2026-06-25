@@ -193,7 +193,6 @@ async def delete_template(
 async def serve_template_image(
     template_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
 ):
     """Stream template image file."""
     t = await template_crud.get(db, template_id)
@@ -233,6 +232,15 @@ async def test_template_matching(
     """Test template matching on an image using specified templates."""
     import cv2
     import numpy as np
+
+    method_map = {
+        "tm_ccoeff": cv2.TM_CCOEFF,
+        "tm_ccoeff_normed": cv2.TM_CCOEFF_NORMED,
+        "tm_sqdiff": cv2.TM_SQDIFF,
+        "sqdiff_normed": cv2.TM_SQDIFF_NORMED,
+        "tm_cCoeff": cv2.TM_CCOEFF,
+    }
+    cv_method = method_map.get(req.method, cv2.TM_CCOEFF_NORMED)
 
     results: list[TemplateTestResult] = []
     screen: Optional[np.ndarray] = None
@@ -275,21 +283,37 @@ async def test_template_matching(
         if tmpl.shape[0] > screen.shape[0] or tmpl.shape[1] > screen.shape[1]:
             continue
 
-        res = cv2.matchTemplate(screen, tmpl, cv2.TM_CCOEFF_NORMED)
-        _, max_val, _, max_loc = cv2.minMaxLoc(res)
+        res = cv2.matchTemplate(screen, tmpl, cv_method)
+        h, w = tmpl.shape[:2]
 
-        if max_val >= (req.threshold or t.match_threshold):
-            h, w = tmpl.shape[:2]
-            results.append(TemplateTestResult(
-                template_id=t.id,
-                template_name=t.name,
-                matched=True,
-                x=int(max_loc[0]),
-                y=int(max_loc[1]),
-                w=int(w),
-                h=int(h),
-                conf=float(max_val),
-            ))
+        if req.multi_match:
+            threshold = req.threshold or t.match_threshold
+            locations = np.where(res >= threshold)
+            for y, x in zip(*locations):
+                val = float(res[y, x])
+                results.append(TemplateTestResult(
+                    template_id=t.id,
+                    template_name=t.name,
+                    matched=True,
+                    x=int(x),
+                    y=int(y),
+                    w=int(w),
+                    h=int(h),
+                    conf=val,
+                ))
+        else:
+            _, max_val, _, max_loc = cv2.minMaxLoc(res)
+            if max_val >= (req.threshold or t.match_threshold):
+                results.append(TemplateTestResult(
+                    template_id=t.id,
+                    template_name=t.name,
+                    matched=True,
+                    x=int(max_loc[0]),
+                    y=int(max_loc[1]),
+                    w=int(w),
+                    h=int(h),
+                    conf=float(max_val),
+                ))
 
     return TemplateTestResponse(
         success=True,

@@ -69,12 +69,12 @@ export const useAnnotationsStore = defineStore('annotations', () => {
     }
   }
 
-  async function loadImageAnnotations(imageId: string) {
+  async function loadImageAnnotations(imageId: string, projectId?: string) {
     loading.value = true
     selectedImageId.value = imageId
     annotations.value = []
     try {
-      const resp = await annotationsApi.getImageAnnotations(imageId)
+      const resp = await annotationsApi.getImageAnnotations(imageId, projectId)
       annotations.value = resp.annotations
       imageWidth.value = resp.image_width
       imageHeight.value = resp.image_height
@@ -85,17 +85,35 @@ export const useAnnotationsStore = defineStore('annotations', () => {
     }
   }
 
-  async function addAnnotation(ann: Partial<Annotation>) {
+  async function addAnnotation(ann: Partial<Annotation>, projectId: string) {
     saving.value = true
     try {
       const created = await annotationsApi.createAnnotation({
         ...ann,
         image_id: selectedImageId.value!,
-      } as Partial<Annotation>)
+        project_id: projectId,
+      } as any)
       annotations.value.push(created)
       return created
     } catch (error) {
       console.error('Failed to add annotation:', error)
+      throw error
+    } finally {
+      saving.value = false
+    }
+  }
+
+  async function createAnnotation(ann: Partial<Annotation>, projectId: string) {
+    saving.value = true
+    try {
+      const created = await annotationsApi.createAnnotation({
+        ...ann,
+        project_id: projectId,
+      } as any)
+      annotations.value.push(created)
+      return created
+    } catch (error) {
+      console.error('Failed to create annotation:', error)
       throw error
     } finally {
       saving.value = false
@@ -130,12 +148,12 @@ export const useAnnotationsStore = defineStore('annotations', () => {
     }
   }
 
-  async function batchSave(anns: Partial<Annotation>[]) {
+  async function batchSave(anns: Partial<Annotation>[], projectId: string) {
     saving.value = true
     try {
       const resp = await annotationsApi.batchCreateAnnotations(selectedImageId.value!, anns)
       if (resp.created > 0 || resp.updated > 0) {
-        await loadImageAnnotations(selectedImageId.value!)
+        await loadImageAnnotations(selectedImageId.value!, projectId)
       }
       return resp
     } catch (error) {
@@ -186,6 +204,7 @@ export const useAnnotationsStore = defineStore('annotations', () => {
     fetchProjects,
     fetchStats,
     loadImageAnnotations,
+    createAnnotation,
     addAnnotation,
     updateAnnotation,
     removeAnnotation,

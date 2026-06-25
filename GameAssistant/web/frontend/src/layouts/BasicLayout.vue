@@ -113,11 +113,11 @@ const username = computed(() => authStore.username)
 const menuItems: MenuProps['items'] = [
   { key: '/images', label: '图片管理' },
   { key: '/annotations', label: '标注管理' },
-  { key: '/templates', label: '模板管理' },
   { key: '/datasets', label: '数据集' },
   { key: '/models', label: '模型管理' },
   { key: '/training', label: '训练管理' },
   { key: '/inference', label: '推理测试' },
+  { key: '/templates', label: '模板管理' },
 ]
 
 // Admin-only menu items

@@ -1,4 +1,5 @@
 """Dataset management API — create datasets, manage versions, generate YOLO format."""
+import json
 import os
 from datetime import datetime
 from typing import Optional
@@ -6,7 +7,6 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.database import get_db
 from app.models.user import User
 from app.security import get_current_user
@@ -126,9 +126,10 @@ async def create_dataset_version(
     next_vn = await dataset_version_crud.get_next_version_number(db, dataset_id)
     version = await dataset_version_crud.create(db, {
         **obj_in.model_dump(),
+        "dataset_id": dataset_id,
         "version_number": next_vn,
         "created_by": current_user.id,
-        "status": "preparing",
+        "status": "ready",
     })
     await db.commit()
     return version
@@ -242,3 +243,29 @@ async def generate_yolo_dataset(
             "X-Image-Count": str(version.image_count),
         },
     )
+
+
+# ── Data Augmentation Config ───────────────────────────────
+
+@router.post("/{dataset_id}/versions/{version_id}/augmentation")
+async def save_augmentation_config(
+    dataset_id: str,
+    version_id: str,
+    req: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Save data augmentation configuration for a dataset version."""
+    version = await dataset_version_crud.get(db, version_id)
+    if not version or version.dataset_id != dataset_id:
+        raise HTTPException(status_code=404, detail="Version not found")
+
+    # Store augmentation config in the version's yaml_content or a dedicated field
+    from sqlalchemy import update
+    await db.execute(
+        update(DatasetVersion)
+        .where(DatasetVersion.id == version_id)
+        .values(dataset_yaml_content=json.dumps(req))
+    )
+    await db.commit()
+    return {"success": True, "message": "Augmentation config saved"}

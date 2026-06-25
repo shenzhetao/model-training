@@ -1,10 +1,12 @@
 """Pydantic schemas for training management."""
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, Field
+from pydantic import Field, ConfigDict
+
+from app.schemas._base import NoProtectedNamespaceModel
 
 
-class TrainingJobBase(BaseModel):
+class TrainingJobBase(NoProtectedNamespaceModel):
     name: str
     dataset_version_id: str
     base_model_architecture: str = "yolov8n"
@@ -28,7 +30,7 @@ class TrainingJobCreate(TrainingJobBase):
     resume_from: Optional[str] = None
 
 
-class TrainingJobUpdate(BaseModel):
+class TrainingJobUpdate(NoProtectedNamespaceModel):
     name: Optional[str] = None
     status: Optional[str] = None
     current_epoch: Optional[int] = None
@@ -52,11 +54,10 @@ class TrainingJobResponse(TrainingJobBase):
     created_at: datetime
     error_message: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True, protected_namespaces=())
 
 
-class TrainingLogResponse(BaseModel):
+class TrainingLogResponse(NoProtectedNamespaceModel):
     id: str
     training_job_id: str
     epoch: int
@@ -75,11 +76,10 @@ class TrainingLogResponse(BaseModel):
     epoch_duration_sec: Optional[int] = None
     logged_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True, protected_namespaces=())
 
 
-class TrainingProgressResponse(BaseModel):
+class TrainingProgressResponse(NoProtectedNamespaceModel):
     job_id: str
     status: str
     current_epoch: int

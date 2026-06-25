@@ -87,8 +87,10 @@ export const annotationsApi = {
   },
 
   // Annotations
-  async getImageAnnotations(imageId: string): Promise<ImageAnnotationsResponse> {
-    return request.get(`/annotations/images/${imageId}`)
+  async getImageAnnotations(imageId: string, projectId?: string): Promise<ImageAnnotationsResponse> {
+    const q = new URLSearchParams()
+    if (projectId) q.set('project_id', projectId)
+    return request.get(`/annotations/images/${imageId}${q.toString() ? `?${q}` : ''}`)
   },
 
   async createAnnotation(data: Partial<Annotation>): Promise<Annotation> {
@@ -147,6 +149,14 @@ export const annotationsApi = {
     return request.post(`/annotations/projects/${projectId}/images`, { image_ids: imageIds })
   },
 
+  async removeProjectImages(projectId: string, imageIds: string[]): Promise<{ removed: number }> {
+    return request.delete(`/annotations/projects/${projectId}/images?image_ids=${imageIds.join(',')}`)
+  },
+
+  async getProjectImages(projectId: string): Promise<{ items: { image_id: string }[]; total: number }> {
+    return request.get(`/annotations/projects/${projectId}/images`)
+  },
+
   // Stats
   async getStats(): Promise<ProjectStats> {
     return request.get('/annotations/stats')
@@ -165,6 +175,26 @@ export const annotationsApi = {
     return request.post(`/annotations/projects/${projectId}/reject`, data)
   },
 
+  async reviewProjectImage(
+    projectId: string,
+    imageId: string,
+    data: { action: 'approve' | 'request_changes'; reason?: string }
+  ): Promise<{ success: boolean; action: string }> {
+    return request.post(`/annotations/projects/${projectId}/images/${imageId}/review`, data)
+  },
+
+  async getProjectImageReviews(projectId: string): Promise<{ reviews: Record<string, { review_status: string; rejection_reason: string; reviewed_at: string; reviewer_id: string | null }> }> {
+    return request.get(`/annotations/projects/${projectId}/image-reviews`)
+  },
+
+  async bulkApproveProject(projectId: string): Promise<{ success: boolean; approved_count: number; status: string }> {
+    return request.post(`/annotations/projects/${projectId}/bulk-approve`)
+  },
+
+  async bulkRejectProject(projectId: string, data: { reason?: string }): Promise<{ success: boolean; rejected_count: number; status: string }> {
+    return request.post(`/annotations/projects/${projectId}/bulk-reject`, data)
+  },
+
   async getReviewQueue(params?: { page?: number; page_size?: number }): Promise<{ items: AnnotationProject[]; total: number }> {
     const q = new URLSearchParams()
     if (params?.page) q.set('page', String(params.page))
@@ -178,6 +208,21 @@ export const annotationsApi = {
 
   async getReviewSummary(): Promise<{ total_projects: number; pending_review: number; needs_revision: number; completed: number; in_progress: number }> {
     return request.get('/annotations/stats/review-summary')
+  },
+
+  async exportYOLO(projectId?: string): Promise<void> {
+    const resp = await request.get(`/annotations/export/yolo${projectId ? `?project_id=${projectId}` : ''}`, {
+      responseType: 'blob' as const,
+    }) as unknown as { data: Blob; headers: Record<string, string> }
+    const blob: Blob = resp.data
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `annotations_${new Date().toISOString().slice(0, 10)}.zip`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
   },
 }
 

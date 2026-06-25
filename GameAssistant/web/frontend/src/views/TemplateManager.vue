@@ -191,9 +191,9 @@
                 </a-form-item>
                 <a-form-item label="匹配方法">
                   <a-select v-model:value="matchMethod" style="width:100%">
-                    <a-select-option value="tm_ccoeff">归一化相关系数（推荐）</a-select-option>
+                    <a-select-option value="tm_ccoeff_normed">归一化相关系数（推荐）</a-select-option>
                     <a-select-option value="tm_sqdiff">平方差匹配</a-select-option>
-                    <a-select-option value="tm_c coeff">相关系数</a-select-option>
+                    <a-select-option value="tm_ccoeff">相关系数</a-select-option>
                     <a-select-option value="sqdiff_normed">平方差归一化</a-select-option>
                   </a-select>
                 </a-form-item>
@@ -363,7 +363,7 @@ const testImageId = ref<string | null>(null)
 const testTemplateIds = ref<string[]>([])
 const testThreshold = ref(0.8)
 const multiMatch = ref(false)
-const matchMethod = ref('tm_ccoeff')
+const matchMethod = ref('tm_ccoeff_normed')
 const showPreviewModal = ref(false)
 
 const showUpload = ref(false)
@@ -420,12 +420,16 @@ function getThresholdHint(threshold: number): string {
   return '宽松模式，可能误检'
 }
 
-function handleTreeSelect(keys: string[]) {
+function handleTreeSelect(keys: string[], info: any) {
   if (keys.length > 0) {
     const k = keys[0]
-    if (k.includes('-')) {
+    // Determine if the selected node is a template or class name.
+    // The tree node `dataRef` has `isTemplate: true` for template nodes.
+    const nodeData = info?.node?.dataRef
+    if (nodeData?.isTemplate) {
       selectedTemplateId.value = k
     } else {
+      // Class name node — filter by this class
       selectedTemplateId.value = null
       filterClass.value = k
     }

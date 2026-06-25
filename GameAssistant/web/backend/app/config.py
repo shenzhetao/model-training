@@ -3,6 +3,11 @@ from typing import Optional
 import os
 
 
+import os
+
+_env_file = os.path.join(os.path.dirname(__file__), "..", "..", ".env")
+
+
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
@@ -37,8 +42,9 @@ class Settings(BaseSettings):
     ADB_PORT: int = 5037
 
     class Config:
-        env_file = ".env"
+        env_file = _env_file
         case_sensitive = True
+        extra = "ignore"
 
     @property
     def CORS_ORIGINS(self) -> list[str]:

@@ -20,11 +20,19 @@ export const useAuthStore = defineStore('auth', () => {
   const isAdmin = computed(() => user.value?.role === 'admin')
   const username = computed(() => user.value?.username || '')
 
-  function setAuth(newToken: string, newUser: User | null) {
+  function setToken(newToken: string) {
     token.value = newToken
-    user.value = newUser
     localStorage.setItem(TOKEN_KEY, newToken)
+  }
+
+  function setUser(newUser: User | null) {
+    user.value = newUser
     localStorage.setItem(USER_KEY, JSON.stringify(newUser))
+  }
+
+  function setAuth(newToken: string, newUser: User | null) {
+    setToken(newToken)
+    setUser(newUser)
   }
 
   function logout() {
@@ -49,6 +57,8 @@ export const useAuthStore = defineStore('auth', () => {
     isAuthenticated,
     isAdmin,
     username,
+    setToken,
+    setUser,
     setAuth,
     logout,
     updateUser

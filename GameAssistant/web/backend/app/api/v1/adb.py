@@ -49,7 +49,8 @@ class ScreenshotResponse(BaseModel):
 class InferenceRequest(BaseModel):
     device_id: Optional[str] = None
     mode: str = "hybrid"  # "hybrid" | "template" | "yolo"
-    yolo_conf: float = 0.4
+    yolo_conf: float = 0.25
+    template_conf: float = 0.85
 
 
 class DetectionItem(BaseModel):
@@ -234,7 +235,8 @@ async def take_screenshot(
 async def run_inference(
     device_id: Optional[str] = Query(default=None, description="设备 ID"),
     mode: str = Query(default="hybrid", description="检测模式: hybrid/template/yolo"),
-    yolo_conf: float = Query(default=0.4, ge=0.0, le=1.0, description="YOLO 置信度阈值"),
+    yolo_conf: float = Query(default=0.25, ge=0.0, le=1.0, description="YOLO 置信度阈值"),
+    template_conf: float = Query(default=0.85, ge=0.0, le=1.0, description="模板匹配置信度阈值"),
     current_user: User = Depends(get_current_user),
 ):
     """截取屏幕并运行推理检测，返回检测结果和标注图片。"""
@@ -266,7 +268,7 @@ async def run_inference(
 
     try:
         if mode in ("hybrid", "template"):
-            tw = TemplateWrapper()
+            tw = TemplateWrapper(threshold=template_conf)
             if tw.is_ready:
                 dets = tw.match_all(frame)
                 detections.extend([d.to_dict() for d in dets])

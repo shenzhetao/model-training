@@ -1,10 +1,12 @@
 """Pydantic schemas for inference history."""
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel
+from pydantic import ConfigDict
+
+from app.schemas._base import NoProtectedNamespaceModel
 
 
-class DetectionItemSchema(BaseModel):
+class DetectionItemSchema(NoProtectedNamespaceModel):
     cls: str
     x: float
     y: float
@@ -14,7 +16,7 @@ class DetectionItemSchema(BaseModel):
     source: str
 
 
-class InferenceResultBase(BaseModel):
+class InferenceResultBase(NoProtectedNamespaceModel):
     name: Optional[str] = None
     source_type: str = "device"
     source_file: Optional[str] = None
@@ -45,5 +47,4 @@ class InferenceResultResponse(InferenceResultBase):
     created_by: Optional[str] = None
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True, protected_namespaces=())

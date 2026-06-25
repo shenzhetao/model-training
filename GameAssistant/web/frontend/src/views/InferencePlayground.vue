@@ -102,6 +102,7 @@
                 <a-form-item label="YOLO 置信度" v-if="inferenceMode !== 'template'">
                   <a-slider v-model:value="yoloConf" :min="0.05" :max="0.95" :step="0.05" />
                   <div class="conf-value">{{ (yoloConf * 100).toFixed(0) }}%</div>
+                  <div class="conf-hint">值越低召回率越高，值越高精确度越高</div>
                 </a-form-item>
                 <a-form-item label="自动刷新间隔">
                   <a-slider v-model:value="refreshInterval" :min="2" :max="30" :step="1" :disabled="autoRefresh" />
@@ -506,6 +507,7 @@ onUnmounted(() => { adbStore.reset(); infStore.reset() })
 .detection-overlay { margin-top: 16px; }
 .detection-count { font-size: 14px; color: #666; }
 .conf-value { text-align: center; color: #1890ff; font-weight: 500; }
+.conf-hint { text-align: center; color: #999; font-size: 11px; margin-top: 2px; }
 .video-preview { width: 100%; max-height: 480px; border-radius: 8px; }
 .image-preview { width: 100%; max-height: 480px; object-fit: contain; border-radius: 8px; }
 

@@ -177,6 +177,17 @@
                       <span v-else>等待开始...</span>
                     </template>
                   </a-list-item-meta>
+                  <template #actions>
+                    <a-button
+                      v-if="['pending', 'running'].includes(item.status)"
+                      type="link"
+                      danger
+                      size="small"
+                      @click="handleCancelTask(item)"
+                    >
+                      <DeleteOutlined /> 取消
+                    </a-button>
+                  </template>
                 </a-list-item>
               </template>
             </a-list>
@@ -305,13 +316,16 @@
       </div>
 
       <!-- Pagination -->
-      <div v-if="imagesStore.totalPages > 1" class="pagination">
+      <div v-if="imagesStore.totalPages > 1 || imagesStore.total > 10" class="pagination">
         <a-pagination
           v-model:current="currentPage"
           :total="imagesStore.total"
           :page-size="imagesStore.pageSize"
+          :page-size-options="['10', '20', '50', '100']"
           show-quick-jumper
+          show-size-changer
           @change="handlePageChange"
+          @showSizeChange="handleSizeChange"
         />
       </div>
     </div>
@@ -346,8 +360,8 @@
           <span>{{ imagesStore.lightboxIndex + 1 }} / {{ imagesStore.images.length }}</span>
         </div>
         <div class="lightbox-actions">
-          <a-button type="text" danger @click="handleDeleteCurrentImage">
-            <template #icon><DeleteOutlined /></template>
+          <a-button type="text" @click="closeLightbox">
+            <template #icon><CloseOutlined /></template>
           </a-button>
         </div>
       </div>
@@ -371,6 +385,7 @@ import {
   RightOutlined,
   VideoCameraOutlined,
   PlayCircleOutlined,
+  CloseOutlined,
 } from '@ant-design/icons-vue'
 import { useImagesStore } from '@/stores/images'
 import type { ImageResponse } from '@/api/images'
@@ -632,8 +647,39 @@ function getTaskStatusText(status: string): string {
     running: '抽帧中',
     completed: '已完成',
     failed: '失败',
+    cancelled: '已取消',
   }
   return texts[status] || status
+}
+
+// Cancel extraction task
+async function handleCancelTask(task: ExtractionTaskResponse) {
+  Modal.confirm({
+    title: '确认取消',
+    content: '确定要取消这个抽帧任务吗？已提取的图片不会被删除。',
+    okText: '取消任务',
+    okType: 'danger',
+    async onOk() {
+      try {
+        await videosApi.cancelExtractionTask(task.id)
+        message.success('任务已取消')
+        
+        // Remove from active tasks
+        const index = activeTasks.value.findIndex(t => t.id === task.id)
+        if (index >= 0) {
+          activeTasks.value.splice(index, 1)
+        }
+        
+        // Stop polling for this task
+        if (pollIntervals[task.id]) {
+          clearInterval(pollIntervals[task.id])
+          delete pollIntervals[task.id]
+        }
+      } catch (error: any) {
+        message.error(error?.response?.data?.detail || '取消任务失败')
+      }
+    },
+  })
 }
 
 // Computed
@@ -880,14 +926,24 @@ function handlePageChange(page: number) {
   imagesStore.goToPage(page).then(() => observeVisibleImages())
 }
 
+function handleSizeChange(_current: number, size: number) {
+  imagesStore.pageSize = size
+  currentPage.value = 1
+  visibleImages.value.clear()
+  imagesStore.fetchImages({ page: 1, page_size: size, skipCache: true }).then(() => observeVisibleImages())
+}
+
 function handleRefresh() {
-  imagesStore.fetchImages().then(() => observeVisibleImages())
+  imagesStore.fetchImages({ skipCache: true }).then(() => observeVisibleImages())
 }
 
 // Lifecycle
 onMounted(() => {
+  // Setup observer first, then fetch images and observe after DOM updates
   setupImageObserver()
-  imagesStore.fetchImages()
+  imagesStore.fetchImages().then(() => {
+    observeVisibleImages()
+  })
   loadVideos()
   loadActiveTasks()
 })
@@ -1241,7 +1297,7 @@ onUnmounted(() => {
 }
 
 .lightbox-actions :deep(.ant-btn:hover) {
-  color: #ff4d4f;
+  background: rgba(255, 255, 255, 0.2);
 }
 
 /* Video Extraction Panel */
